@@ -420,6 +420,121 @@
   #qaMaskBottom{ bottom:0; left:0; right:0; }
   #qaMaskLeft  { top:0; bottom:0; left:0; }
   #qaMaskRight { top:0; bottom:0; right:0; }
+
+  /* ---- 一問一答：カード右下の「暗記済み／削除」ボタン ---- */
+  .qa-card-actions{
+    position:absolute;
+    right:8px; bottom:8px;
+    display:flex;
+    gap:6px;
+    z-index:7;
+  }
+  .qa-card-actions button{
+    padding:8px 10px;
+    font-size:12px;
+    background:rgba(0,0,0,0.62);
+    color:#fff;
+  }
+  .qa-card-actions button.active{
+    background: var(--accent);
+    color:#08251c;
+    font-weight:600;
+  }
+  .qa-card-actions .qa-del-single{
+    background:rgba(226,104,95,0.85);
+  }
+
+  /* ---- 一問一答：表示モード／フィルターの切り替え行 ---- */
+  .qa-sub-row{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .qa-sub-row button{
+    flex:1;
+    min-width:78px;
+    padding:8px 6px;
+    font-size:12.5px;
+  }
+
+  /* ---- 一問一答：一覧（バーッと並べる）モード ---- */
+  #qaList{
+    display:none;
+    flex-direction:column;
+    gap:10px;
+    margin-top:10px;
+  }
+  .qa-list-item{
+    position:relative;
+    background: var(--panel);
+    border-radius: var(--radius);
+    overflow:hidden;
+  }
+  .qa-list-item.memorized{
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .qa-list-imgwrap{
+    position:relative;
+    width:100%;
+    background:#000;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .qa-list-imgwrap img{
+    width:100%;
+    display:block;
+  }
+  .qa-list-mask{
+    position:absolute;
+    background: var(--panel);
+    border: 1px dashed var(--text-dim);
+    box-sizing:border-box;
+  }
+  .qa-list-badge{
+    position:absolute;
+    left:6px; top:6px;
+    background: var(--accent);
+    color:#08251c;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 7px;
+    border-radius:10px;
+    z-index:3;
+    display:none;
+  }
+  .qa-list-item.memorized .qa-list-badge{ display:block; }
+  .qa-list-actions{
+    display:flex;
+    gap:6px;
+    padding:6px;
+  }
+  .qa-list-actions button{
+    flex:1;
+    padding:8px 0;
+    font-size:12.5px;
+    background:#2a3140;
+    color:var(--text);
+  }
+  .qa-list-actions button.active{
+    background: var(--accent);
+    color:#08251c;
+    font-weight:600;
+  }
+  .qa-list-actions .qa-list-del{
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    flex:0 0 60px;
+  }
+  .qa-empty-filter{
+    color: var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    padding: 30px 0;
+    display:none;
+  }
 </style>
 </head>
 <body>
@@ -558,7 +673,14 @@
     <button id="qaViewBtn" class="btn-main" disabled>今の写真で練習する（保存せずに）</button>
   </div>
   <div class="row">
-    <button id="saveDeckBtn" class="btn-secondary" style="flex:1" disabled>今の写真を名前をつけてセットに保存</button>
+    <select id="folderSelect"><option value="">（フォルダなし）</option></select>
+    <button id="newFolderBtn" class="btn-secondary">＋新規フォルダ</button>
+  </div>
+  <div class="row">
+    <button id="deleteFolderBtn" class="btn-danger" style="flex:1">選んだフォルダを削除</button>
+  </div>
+  <div class="row">
+    <button id="saveDeckBtn" class="btn-secondary" style="flex:1" disabled>今の写真を名前をつけてセットに保存（選んだフォルダに入ります）</button>
   </div>
   <div class="row">
     <select id="deckSelect"><option value="">（保存したセットなし）</option></select>
@@ -575,21 +697,46 @@
      表示/非表示が切り替わり、前へ/次へで別のカードに移動する -->
 <div id="qaViewer">
   <h1 id="qaDeckTitle" style="margin-bottom:2px;">一問一答</h1>
-  <div id="qaCountLabel" style="margin-bottom:12px; font-size:14px; color: var(--text-dim);">
+  <div id="qaCountLabel" style="margin-bottom:6px; font-size:14px; color: var(--text-dim);">
     カード <b id="qaIndexNum" style="color:var(--text);">1</b> / <span id="qaTotalNum">1</span>
+    ／暗記済み <b id="qaMemNum" style="color:var(--text);">0</b> / <span id="qaAllNum">0</span>
   </div>
-  <div id="qaCardWrap">
-    <img id="qaCardImg" src="" alt="カード">
-    <div id="qaMaskTop" class="qa-mask"></div>
-    <div id="qaMaskBottom" class="qa-mask"></div>
-    <div id="qaMaskLeft" class="qa-mask"></div>
-    <div id="qaMaskRight" class="qa-mask"></div>
+
+  <div class="qa-sub-row">
+    <button id="qaModeOneBtn" class="btn-toggle active">1枚ずつ表示</button>
+    <button id="qaModeListBtn" class="btn-toggle">一覧表示（長押しで並べ替え）</button>
   </div>
-  <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
+  <div class="qa-sub-row">
+    <button id="qaFilterAllBtn" class="btn-toggle active" data-filter="all">全部表示</button>
+    <button id="qaFilterUnBtn" class="btn-toggle" data-filter="unmemorized">未暗記のみ</button>
+    <button id="qaFilterMemBtn" class="btn-toggle" data-filter="memorized">暗記済みのみ</button>
+  </div>
   <div class="row">
-    <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
-    <button id="qaNextBtn" class="btn-secondary" style="flex:1">次へ →</button>
+    <button id="qaShuffleBtn" class="btn-secondary" style="flex:1">シャッフル</button>
   </div>
+
+  <div id="qaOneWrap">
+    <div id="qaCardWrap">
+      <img id="qaCardImg" src="" alt="カード">
+      <div id="qaMaskTop" class="qa-mask"></div>
+      <div id="qaMaskBottom" class="qa-mask"></div>
+      <div id="qaMaskLeft" class="qa-mask"></div>
+      <div id="qaMaskRight" class="qa-mask"></div>
+      <div class="qa-card-actions">
+        <button id="qaMemBtn">暗記済みにする</button>
+        <button id="qaDelBtn" class="qa-del-single">削除</button>
+      </div>
+    </div>
+    <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
+    <div class="row">
+      <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
+      <button id="qaNextBtn" class="btn-secondary" style="flex:1">次へ →</button>
+    </div>
+  </div>
+
+  <div id="qaList"></div>
+  <div id="qaEmptyFilter" class="qa-empty-filter">このフィルターに当てはまるカードがありません</div>
+
   <div class="row">
     <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
   </div>
@@ -714,20 +861,36 @@ const saveDeckBtn    = document.getElementById('saveDeckBtn');
 const deckSelect     = document.getElementById('deckSelect');
 const practiceDeckBtn= document.getElementById('practiceDeckBtn');
 const deleteDeckBtn  = document.getElementById('deleteDeckBtn');
+const folderSelect   = document.getElementById('folderSelect');
+const newFolderBtn   = document.getElementById('newFolderBtn');
+const deleteFolderBtn= document.getElementById('deleteFolderBtn');
 
 const qaViewer    = document.getElementById('qaViewer');
 const qaDeckTitle = document.getElementById('qaDeckTitle');
+const qaOneWrap   = document.getElementById('qaOneWrap');
 const qaCardWrap  = document.getElementById('qaCardWrap');
 const qaCardImg   = document.getElementById('qaCardImg');
 const qaIndexNum  = document.getElementById('qaIndexNum');
 const qaTotalNum  = document.getElementById('qaTotalNum');
+const qaMemNum    = document.getElementById('qaMemNum');
+const qaAllNum    = document.getElementById('qaAllNum');
 const qaMaskTop    = document.getElementById('qaMaskTop');
 const qaMaskBottom = document.getElementById('qaMaskBottom');
 const qaMaskLeft   = document.getElementById('qaMaskLeft');
 const qaMaskRight  = document.getElementById('qaMaskRight');
+const qaMemBtn    = document.getElementById('qaMemBtn');
+const qaDelBtn    = document.getElementById('qaDelBtn');
 const qaPrevBtn   = document.getElementById('qaPrevBtn');
 const qaNextBtn   = document.getElementById('qaNextBtn');
 const qaCloseBtn  = document.getElementById('qaCloseBtn');
+const qaModeOneBtn  = document.getElementById('qaModeOneBtn');
+const qaModeListBtn = document.getElementById('qaModeListBtn');
+const qaFilterAllBtn = document.getElementById('qaFilterAllBtn');
+const qaFilterUnBtn  = document.getElementById('qaFilterUnBtn');
+const qaFilterMemBtn = document.getElementById('qaFilterMemBtn');
+const qaShuffleBtn   = document.getElementById('qaShuffleBtn');
+const qaList         = document.getElementById('qaList');
+const qaEmptyFilter  = document.getElementById('qaEmptyFilter');
 
 // 一問一答モードが有効かどうか、隠す範囲(%)は何%か、を保持しておく変数。
 // ページを開き直しても同じ設定を使えるよう、localStorageにも保存する
@@ -736,10 +899,21 @@ const QA_DECKS_KEY = 'wordQaDecks';
 let qaEnabled = false;
 let maskTop = 0, maskBottom = 0, maskLeft = 0, maskRight = 50;
 
-// 練習画面で今どのセットを表示しているか({name, shots, mask})
-let qaPractice = { name: '', shots: [], mask: { top:0, bottom:0, left:0, right:50 } };
-let qaIndex = 0;          // 練習画面で今何枚目を見ているか
+// 練習画面で今どのセットを表示しているか
+// ({name, shots, mask, deckRecord}) deckRecordは保存済みセットを開いた場合だけ
+// 中身(IndexedDBから取ってきたオブジェクトそのもの)が入る。
+// これがあれば、カードを編集するたびにそのままストレージへ上書き保存する。
+let qaPractice = { name: '', shots: [], mask: { top:0, bottom:0, left:0, right:50 }, deckRecord: null };
 let qaRevealed = false;   // 今のカードが「隠した部分を表示中」かどうか
+let qaMode = 'one';       // 'one'=1枚ずつ表示 / 'list'=一覧表示
+let qaFilter = 'all';     // 'all' / 'memorized' / 'unmemorized'
+let qaCursor = 0;         // 1枚ずつ表示のとき、フィルター後の並びの中で何枚目を見ているか
+let qaListRevealed = new Set(); // 一覧表示で、今どのカードの答えを開いているか(カードのidを保持)
+
+// 撮影した写真1枚(shot)にユニークなIDを振るための小さな関数
+function makeShotId(){
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
 
 // 撮影枚数の上限は撤廃しました（以前は20枚→40枚でしたが、今は無制限です）。
 // 撮った画像を貯めておく配列。dataUrlに加えてwidth/heightも
@@ -998,19 +1172,112 @@ loadQaSettings();
    IndexedDBという別の保存の仕組みに変更し、この上限を大きく緩和しています。 */
 const DECK_DB_NAME = 'wordScannerDB';
 const DECK_STORE_NAME = 'decks';
+const FOLDER_STORE_NAME = 'folders';
 
+// バージョンを2に上げて、フォルダ保存用のストア(folders)を追加。
+// 既にversion1で使っていた人のデータ(decksストア)はそのまま残る。
 function openDeckDB(){
   return new Promise((resolve, reject)=>{
-    const req = indexedDB.open(DECK_DB_NAME, 1);
+    const req = indexedDB.open(DECK_DB_NAME, 2);
     req.onupgradeneeded = ()=>{
       if(!req.result.objectStoreNames.contains(DECK_STORE_NAME)){
         req.result.createObjectStore(DECK_STORE_NAME, { keyPath:'name' });
+      }
+      if(!req.result.objectStoreNames.contains(FOLDER_STORE_NAME)){
+        req.result.createObjectStore(FOLDER_STORE_NAME, { keyPath:'name' });
       }
     };
     req.onsuccess = ()=> resolve(req.result);
     req.onerror = ()=> reject(req.error);
   });
 }
+
+/* ---------- フォルダの読み書き ---------- */
+async function loadFolders(){
+  try{
+    const db = await openDeckDB();
+    return await new Promise((resolve, reject)=>{
+      const tx = db.transaction(FOLDER_STORE_NAME, 'readonly');
+      const req = tx.objectStore(FOLDER_STORE_NAME).getAll();
+      req.onsuccess = ()=> resolve(req.result || []);
+      req.onerror = ()=> reject(req.error);
+    });
+  }catch(e){
+    console.error(e);
+    return [];
+  }
+}
+
+async function saveFolderToStorage(folder){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(FOLDER_STORE_NAME, 'readwrite');
+    tx.objectStore(FOLDER_STORE_NAME).put(folder);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function deleteFolderFromStorage(name){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(FOLDER_STORE_NAME, 'readwrite');
+    tx.objectStore(FOLDER_STORE_NAME).delete(name);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function refreshFolderSelect(){
+  const list = await loadFolders();
+  const prevValue = folderSelect.value;
+  folderSelect.innerHTML = '';
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '（フォルダなし）';
+  folderSelect.appendChild(noneOpt);
+  list.forEach(f=>{
+    const opt = document.createElement('option');
+    opt.value = f.name;
+    opt.textContent = f.name;
+    folderSelect.appendChild(opt);
+  });
+  // 削除などの後も、選べるならさっきまでの選択を維持する
+  if([...folderSelect.options].some(o => o.value === prevValue)){
+    folderSelect.value = prevValue;
+  }
+}
+
+newFolderBtn.addEventListener('click', async ()=>{
+  const name = prompt('フォルダ名を入力してください', '');
+  if(!name) return;
+  await saveFolderToStorage({ name: name });
+  await refreshFolderSelect();
+  folderSelect.value = name;
+  setStatus('フォルダ「' + name + '」を作成しました');
+});
+
+deleteFolderBtn.addEventListener('click', async ()=>{
+  const name = folderSelect.value;
+  if(!name){
+    setStatus('削除するフォルダを選んでください', true);
+    return;
+  }
+  const decks = await loadDecks();
+  const inFolder = decks.filter(d => d.folder === name);
+  const warn = inFolder.length > 0
+    ? 'フォルダ「' + name + '」の中には' + inFolder.length + '個のセットがあります。フォルダを削除すると、中のセットもすべて削除されます。よろしいですか？'
+    : 'フォルダ「' + name + '」を削除します。よろしいですか？';
+  if(!confirm(warn)) return;
+
+  for(const d of inFolder){
+    await deleteDeckFromStorage(d.name);
+  }
+  await deleteFolderFromStorage(name);
+  await refreshFolderSelect();
+  await refreshDeckSelect();
+  setStatus('フォルダ「' + name + '」を削除しました');
+});
 
 async function loadDecks(){
   try{
@@ -1057,7 +1324,13 @@ async function migrateOldDecksIfNeeded(){
     for(const d of oldList){
       await saveDeckToStorage({
         name: d.name,
-        shots: (d.shots || []).map(s => ({ ...s, mask: s.mask || d.mask }))
+        folder: d.folder || '',
+        shots: (d.shots || []).map(s => ({
+          ...s,
+          mask: s.mask || d.mask,
+          id: s.id || makeShotId(),
+          memorized: typeof s.memorized === 'boolean' ? s.memorized : false
+        }))
       });
     }
     localStorage.removeItem(QA_DECKS_KEY);
@@ -1068,6 +1341,7 @@ async function migrateOldDecksIfNeeded(){
 
 async function refreshDeckSelect(){
   const list = await loadDecks();
+  const prevValue = deckSelect.value;
   deckSelect.innerHTML = '';
   if(list.length === 0){
     const opt = document.createElement('option');
@@ -1078,12 +1352,39 @@ async function refreshDeckSelect(){
     deleteDeckBtn.disabled = true;
     return;
   }
+
+  // フォルダなしのセットを先に、そのあとフォルダごとにoptgroupでまとめて表示する
+  const noFolder = list.filter(d => !d.folder);
+  const folders = {};
   list.forEach(d=>{
+    if(d.folder){
+      if(!folders[d.folder]) folders[d.folder] = [];
+      folders[d.folder].push(d);
+    }
+  });
+
+  noFolder.forEach(d=>{
     const opt = document.createElement('option');
     opt.value = d.name;
     opt.textContent = d.name + '（' + d.shots.length + '枚）';
     deckSelect.appendChild(opt);
   });
+
+  Object.keys(folders).sort().forEach(folderName=>{
+    const group = document.createElement('optgroup');
+    group.label = '📁 ' + folderName;
+    folders[folderName].forEach(d=>{
+      const opt = document.createElement('option');
+      opt.value = d.name;
+      opt.textContent = d.name + '（' + d.shots.length + '枚）';
+      group.appendChild(opt);
+    });
+    deckSelect.appendChild(group);
+  });
+
+  if([...deckSelect.options].some(o => o.value === prevValue)){
+    deckSelect.value = prevValue;
+  }
   practiceDeckBtn.disabled = false;
   deleteDeckBtn.disabled = false;
 }
@@ -1095,8 +1396,14 @@ saveDeckBtn.addEventListener('click', async ()=>{
 
   const newDeck = {
     name: name,
-    // 写真ごとに記録しておいた「隠す範囲」の設定(mask)もそのまま保存する
-    shots: shots.map(s => ({ dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask }))
+    folder: folderSelect.value || '',
+    // 写真ごとに記録しておいた「隠す範囲」の設定(mask)、
+    // ID、暗記済みフラグもそのまま保存する
+    shots: shots.map(s => ({
+      dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask,
+      id: s.id || makeShotId(),
+      memorized: !!s.memorized
+    }))
   };
 
   saveDeckBtn.disabled = true;
@@ -1120,7 +1427,7 @@ practiceDeckBtn.addEventListener('click', async ()=>{
   const list = await loadDecks();
   const deck = list.find(d => d.name === name);
   if(!deck) return;
-  openQaViewer(deck.name, deck.shots, deck.mask);
+  openQaViewer(deck.name, deck.shots, deck.mask, deck);
 });
 
 deleteDeckBtn.addEventListener('click', async ()=>{
@@ -1134,40 +1441,127 @@ deleteDeckBtn.addEventListener('click', async ()=>{
 
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
+  await refreshFolderSelect();
   await refreshDeckSelect();
 })();
 
 /* ---------- 一問一答：練習画面(全画面) ----------
    name/shots/maskを指定しないで呼ぶと「今の写真」で練習する。
-   セットを指定した場合はそのセットの内容で練習する */
-function openQaViewer(name, practiceShots, mask){
+   セットを指定した場合はそのセットの内容で練習する。
+   deckRecordを渡しておくと、練習中にカードを編集(削除・並べ替え・
+   暗記済み切り替え)するたびに、そのままIndexedDBへ上書き保存される。 */
+function openQaViewer(name, practiceShots, mask, deckRecord){
   const list = practiceShots || shots;
   if(list.length === 0) return;
+
+  // 古い形式のデータ(ID・暗記済みフラグが無いもの)にも対応
+  list.forEach(s=>{
+    if(!s.id) s.id = makeShotId();
+    if(typeof s.memorized !== 'boolean') s.memorized = false;
+  });
+
   qaPractice = {
     name: name || '',
     shots: list,
-    mask: mask || { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }
+    mask: mask || { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
+    deckRecord: deckRecord || null
   };
   qaDeckTitle.textContent = qaPractice.name ? ('一問一答：' + qaPractice.name) : '一問一答：今の写真';
-  qaIndex = 0;
+  qaMode = 'one';
+  qaFilter = 'all';
+  qaCursor = 0;
+  qaListRevealed = new Set();
+  setQaModeButtons();
+  setQaFilterButtons();
   qaViewer.style.display = 'block';
-  renderQaCard();
+  renderQaAll();
 }
 
-function renderQaCard(){
-  const shot = qaPractice.shots[qaIndex];
+/* ---------- カードを編集した後の後始末 ----------
+   保存済みセットを練習中ならストレージへ上書き保存し、
+   「今の写真」を練習中なら、上のサムネイル一覧にも反映する */
+function afterQaMutation(){
+  if(qaPractice.deckRecord){
+    saveDeckToStorage(qaPractice.deckRecord).then(refreshDeckSelect).catch(err=>{
+      console.error(err);
+      setStatus('セットの保存に失敗しました：' + (err && err.message ? err.message : '不明なエラー'), true);
+    });
+  }else if(qaPractice.shots === shots){
+    renderThumbs();
+  }
+}
+
+// 今のフィルターに当てはまるカードの「元の配列での位置」の一覧を返す
+function getQaFilteredIndices(){
+  return qaPractice.shots
+    .map((s, i)=> i)
+    .filter(i=>{
+      const s = qaPractice.shots[i];
+      if(qaFilter === 'memorized') return !!s.memorized;
+      if(qaFilter === 'unmemorized') return !s.memorized;
+      return true;
+    });
+}
+
+function setQaModeButtons(){
+  qaModeOneBtn.classList.toggle('active', qaMode === 'one');
+  qaModeListBtn.classList.toggle('active', qaMode === 'list');
+}
+function setQaFilterButtons(){
+  qaFilterAllBtn.classList.toggle('active', qaFilter === 'all');
+  qaFilterUnBtn.classList.toggle('active', qaFilter === 'unmemorized');
+  qaFilterMemBtn.classList.toggle('active', qaFilter === 'memorized');
+}
+
+function updateQaCounts(){
+  qaAllNum.textContent = qaPractice.shots.length;
+  qaMemNum.textContent = qaPractice.shots.filter(s => s.memorized).length;
+}
+
+/* ---------- 練習画面全体の描画（1枚ずつ／一覧、共通の入り口） ---------- */
+function renderQaAll(){
+  updateQaCounts();
+  const filtered = getQaFilteredIndices();
+
+  if(filtered.length === 0){
+    qaOneWrap.style.display = 'none';
+    qaList.style.display = 'none';
+    qaEmptyFilter.style.display = 'block';
+    return;
+  }
+  qaEmptyFilter.style.display = 'none';
+  if(qaCursor >= filtered.length) qaCursor = filtered.length - 1;
+  if(qaCursor < 0) qaCursor = 0;
+
+  if(qaMode === 'one'){
+    qaOneWrap.style.display = 'block';
+    qaList.style.display = 'none';
+    renderQaCard(filtered);
+  }else{
+    qaOneWrap.style.display = 'none';
+    qaList.style.display = 'flex';
+    renderQaList(filtered);
+  }
+}
+
+/* ---------- 1枚ずつ表示モード ---------- */
+function renderQaCard(filtered){
+  const masterIdx = filtered[qaCursor];
+  const shot = qaPractice.shots[masterIdx];
+  qaCardWrap.dataset.masterIdx = masterIdx;
   qaCardImg.src = shot.dataUrl;
-  qaIndexNum.textContent = qaIndex + 1;
-  qaTotalNum.textContent = qaPractice.shots.length;
+  qaIndexNum.textContent = qaCursor + 1;
+  qaTotalNum.textContent = filtered.length;
   qaRevealed = false;
-  applyQaMaskVisibility();
+  applyQaMaskVisibility(shot);
+  qaMemBtn.textContent = shot.memorized ? '未暗記に戻す' : '暗記済みにする';
+  qaMemBtn.classList.toggle('active', !!shot.memorized);
 }
 
 // 隠す範囲(qaMaskTop等)の大きさを切り替える。
 // 写真ごとに記録された設定(shot.mask)があればそれを優先し、
 // 無い場合(古い形式で保存したセットなど)はセット全体の設定を使う
-function applyQaMaskVisibility(){
-  const shot = qaPractice.shots[qaIndex];
+function applyQaMaskVisibility(shot){
   const m = (shot && shot.mask) || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
   [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{
     el.style.display = qaRevealed ? 'none' : 'block';
@@ -1178,24 +1572,246 @@ function applyQaMaskVisibility(){
   qaMaskRight.style.width = m.right + '%';
 }
 
-qaCardWrap.addEventListener('click', ()=>{
+qaCardWrap.addEventListener('click', (e)=>{
+  if(e.target.closest('.qa-card-actions')) return;
   qaRevealed = !qaRevealed;
-  applyQaMaskVisibility();
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  applyQaMaskVisibility(qaPractice.shots[masterIdx]);
+});
+
+qaMemBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  const shot = qaPractice.shots[masterIdx];
+  shot.memorized = !shot.memorized;
+  afterQaMutation();
+  renderQaAll();
+});
+
+qaDelBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  if(!confirm('このカードを削除します。よろしいですか？')) return;
+  qaPractice.shots.splice(masterIdx, 1);
+  afterQaMutation();
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
 });
 
 qaViewBtn.addEventListener('click', ()=> openQaViewer());
 
 qaPrevBtn.addEventListener('click', ()=>{
-  qaIndex = (qaIndex - 1 + qaPractice.shots.length) % qaPractice.shots.length;
-  renderQaCard();
+  const filtered = getQaFilteredIndices();
+  if(filtered.length === 0) return;
+  qaCursor = (qaCursor - 1 + filtered.length) % filtered.length;
+  renderQaAll();
 });
 qaNextBtn.addEventListener('click', ()=>{
-  qaIndex = (qaIndex + 1) % qaPractice.shots.length;
-  renderQaCard();
+  const filtered = getQaFilteredIndices();
+  if(filtered.length === 0) return;
+  qaCursor = (qaCursor + 1) % filtered.length;
+  renderQaAll();
 });
 qaCloseBtn.addEventListener('click', ()=>{
   qaViewer.style.display = 'none';
 });
+
+/* ---------- モード切り替え(1枚ずつ／一覧) ---------- */
+qaModeOneBtn.addEventListener('click', ()=>{
+  qaMode = 'one';
+  setQaModeButtons();
+  renderQaAll();
+});
+qaModeListBtn.addEventListener('click', ()=>{
+  qaMode = 'list';
+  setQaModeButtons();
+  renderQaAll();
+});
+
+/* ---------- フィルター切り替え(全部／未暗記／暗記済み) ---------- */
+[qaFilterAllBtn, qaFilterUnBtn, qaFilterMemBtn].forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    qaFilter = btn.dataset.filter;
+    setQaFilterButtons();
+    qaCursor = 0;
+    renderQaAll();
+  });
+});
+
+/* ---------- シャッフル(練習画面内) ---------- */
+qaShuffleBtn.addEventListener('click', ()=>{
+  if(qaPractice.shots.length < 2) return;
+  const arr = qaPractice.shots;
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  qaCursor = 0;
+  afterQaMutation();
+  renderQaAll();
+  setStatus('カードの順番をシャッフルしました');
+});
+
+/* ---------- 一覧表示モード(縦にバーッと並べる) ----------
+   各カードをタップすると、そのカードだけ答えの表示/非表示が切り替わる。
+   カードを長押ししてそのままドラッグすると、好きな位置に並べ替えられる
+   （この並び順は1枚ずつ表示モードにもそのまま反映される） */
+function renderQaList(filtered){
+  qaList.innerHTML = '';
+
+  filtered.forEach((masterIdx)=>{
+    const shot = qaPractice.shots[masterIdx];
+
+    const item = document.createElement('div');
+    item.className = 'qa-list-item' + (shot.memorized ? ' memorized' : '');
+    item.dataset.masterIdx = masterIdx;
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'qa-list-imgwrap';
+    const img = document.createElement('img');
+    img.src = shot.dataUrl;
+    imgWrap.appendChild(img);
+
+    const badge = document.createElement('div');
+    badge.className = 'qa-list-badge';
+    badge.textContent = '暗記済み';
+    imgWrap.appendChild(badge);
+
+    const m = shot.mask || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
+    const revealed = qaListRevealed.has(shot.id);
+    const sideStyle = {
+      top:    { top:'0', left:'0', right:'0', height:m.top + '%' },
+      bottom: { bottom:'0', left:'0', right:'0', height:m.bottom + '%' },
+      left:   { top:'0', bottom:'0', left:'0', width:m.left + '%' },
+      right:  { top:'0', bottom:'0', right:'0', width:m.right + '%' }
+    };
+    Object.keys(sideStyle).forEach(side=>{
+      const maskEl = document.createElement('div');
+      maskEl.className = 'qa-list-mask';
+      Object.assign(maskEl.style, sideStyle[side]);
+      maskEl.style.display = revealed ? 'none' : 'block';
+      imgWrap.appendChild(maskEl);
+    });
+
+    imgWrap.addEventListener('click', ()=>{
+      if(qaListRevealed.has(shot.id)) qaListRevealed.delete(shot.id);
+      else qaListRevealed.add(shot.id);
+      renderQaAll();
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'qa-list-actions';
+
+    const memBtn = document.createElement('button');
+    memBtn.textContent = shot.memorized ? '未暗記に戻す' : '暗記済みにする';
+    if(shot.memorized) memBtn.classList.add('active');
+    memBtn.addEventListener('click', ()=>{
+      shot.memorized = !shot.memorized;
+      afterQaMutation();
+      renderQaAll();
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'qa-list-del';
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', ()=>{
+      if(!confirm('このカードを削除します。よろしいですか？')) return;
+      const idx = qaPractice.shots.indexOf(shot);
+      if(idx >= 0) qaPractice.shots.splice(idx, 1);
+      afterQaMutation();
+      if(qaPractice.shots.length === 0){
+        qaViewer.style.display = 'none';
+        return;
+      }
+      renderQaAll();
+    });
+
+    actions.appendChild(memBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(imgWrap);
+    item.appendChild(actions);
+
+    attachQaDragHandlers(item);
+    qaList.appendChild(item);
+  });
+}
+
+/* ---------- 一覧表示モードの並べ替え(長押し→ドラッグ) ----------
+   仕組みはサムネイル一覧の並べ替えと同じ。ただし対象がqaPractice.shots
+   （元の配列上の位置=masterIdx）である点が異なる */
+let qaDragFromIdx = null;
+let qaDragTimer = null;
+let qaDragGhost = null;
+let qaDragStartX = 0, qaDragStartY = 0;
+
+function attachQaDragHandlers(item){
+  item.addEventListener('pointerdown', (e)=>{
+    if(e.target.closest('.qa-list-actions')) return;
+    qaDragStartX = e.clientX;
+    qaDragStartY = e.clientY;
+    const idx = Number(item.dataset.masterIdx);
+    clearTimeout(qaDragTimer);
+    qaDragTimer = setTimeout(()=> startQaDrag(item, idx, e.clientX, e.clientY), 320);
+  });
+  item.addEventListener('pointermove', (e)=>{
+    if(qaDragFromIdx === null){
+      if(Math.abs(e.clientX - qaDragStartX) > 10 || Math.abs(e.clientY - qaDragStartY) > 10){
+        clearTimeout(qaDragTimer);
+      }
+    }
+  });
+  item.addEventListener('pointerup', ()=> clearTimeout(qaDragTimer));
+  item.addEventListener('pointercancel', ()=> clearTimeout(qaDragTimer));
+}
+
+function startQaDrag(item, idx, x, y){
+  qaDragFromIdx = idx;
+  if(navigator.vibrate) navigator.vibrate(20);
+
+  qaDragGhost = item.cloneNode(true);
+  qaDragGhost.classList.add('drag-ghost');
+  qaDragGhost.style.width = item.getBoundingClientRect().width + 'px';
+  document.body.appendChild(qaDragGhost);
+  moveQaGhost(x, y);
+}
+
+function moveQaGhost(x, y){
+  if(qaDragGhost){
+    qaDragGhost.style.left = x + 'px';
+    qaDragGhost.style.top = y + 'px';
+  }
+}
+
+function endQaDrag(){
+  clearTimeout(qaDragTimer);
+  if(qaDragGhost){ qaDragGhost.remove(); qaDragGhost = null; }
+  if(qaDragFromIdx !== null){
+    afterQaMutation();
+  }
+  qaDragFromIdx = null;
+}
+
+document.addEventListener('pointermove', (e)=>{
+  if(qaDragFromIdx === null) return;
+  e.preventDefault();
+  moveQaGhost(e.clientX, e.clientY);
+  const overEl = document.elementFromPoint(e.clientX, e.clientY);
+  const overItem = overEl && overEl.closest('.qa-list-item');
+  if(overItem){
+    const overIdx = Number(overItem.dataset.masterIdx);
+    if(!Number.isNaN(overIdx) && overIdx !== qaDragFromIdx){
+      const [moved] = qaPractice.shots.splice(qaDragFromIdx, 1);
+      qaPractice.shots.splice(overIdx, 0, moved);
+      qaDragFromIdx = overIdx;
+      renderQaAll();
+    }
+  }
+}, { passive:false });
+
+document.addEventListener('pointerup', endQaDrag);
+document.addEventListener('pointercancel', endQaDrag);
 
 /* ---------- 枠の向き切り替え(横向き/縦向き) ----------
    縦向きにすると、CSS側で同じサイズの数値の width/height を
@@ -1337,7 +1953,9 @@ shootBtn.addEventListener('click', ()=>{
     // 撮影した瞬間の「隠す範囲」をこの1枚ごとに記録しておく。
     // こうしておくと、途中で隠す位置(上下左右)を変えても、
     // 前に撮った写真の設定は変わらずそのまま残る
-    mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }
+    mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
+    id: makeShotId(),       // 並べ替え・削除・暗記済み管理のためのID
+    memorized: false        // 暗記済みかどうか
   });
   renderThumbs();
   showCaptureSignal();
@@ -1488,8 +2106,7 @@ function renderThumbs(){
     if(shots.length === 0){
       qaViewer.style.display = 'none';
     }else{
-      if(qaIndex >= shots.length) qaIndex = shots.length - 1;
-      renderQaCard();
+      renderQaAll();
     }
   }
 }
