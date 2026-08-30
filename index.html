@@ -325,85 +325,6 @@
   .thumb .ctrl-bar button:disabled{
     opacity:0.35;
   }
-
-  /* ---- 一問一答：カメラ枠の上に出す「膜」のプレビュー ----
-     #frameの内側に配置し、上下左右それぞれ独立に幅/高さを
-     JSから%で指定する。実際の撮影結果には影響しない、あくまで目安表示 */
-  .preview-mask{
-    position:absolute;
-    background: rgba(120,130,150,0.55);
-    pointer-events:none;
-    display:none; /* 一問一答モードOFFのときは非表示 */
-  }
-  #previewMaskTop   { top:0; left:0; right:0; }
-  #previewMaskBottom{ bottom:0; left:0; right:0; }
-  #previewMaskLeft  { top:0; bottom:0; left:0; }
-  #previewMaskRight { top:0; bottom:0; right:0; }
-
-  /* ---- マスクの境界線をタップ&ドラッグして伸び縮みさせるハンドル ----
-     見た目は小さな白いつまみ。指で掴みやすいよう、実際の見た目より
-     少し広めのタップ範囲(padding)を確保している。
-     touch-action:none で、ドラッグ中にページ全体がスクロールしてしまうのを防ぐ */
-  .mask-handle{
-    position:absolute;
-    background:#fff;
-    border-radius:6px;
-    box-shadow:0 1px 4px rgba(0,0,0,0.5);
-    touch-action:none;
-    z-index:6;
-    /* 親の#frameがpointer-events:noneなので、ここで明示的に
-       操作を受け付けるように戻しておかないと、表示されても
-       指でつかめない(反応しない)状態になってしまう */
-    pointer-events:auto;
-  }
-  #maskHandleTop, #maskHandleBottom{
-    left:50%;
-    width:44px; height:16px;
-    transform:translate(-50%,-50%);
-  }
-  #maskHandleLeft, #maskHandleRight{
-    top:50%;
-    width:16px; height:44px;
-    transform:translate(-50%,-50%);
-  }
-
-  /* ---- 一問一答：練習画面(全画面表示) ----
-     通常のページの上に覆いかぶさる形で表示する、独立した「練習用の画面」。
-     閉じるまでは他のパネルは見えなくなる */
-  #qaViewer{
-    display:none;
-    position:fixed;
-    inset:0;
-    background:var(--bg);
-    z-index:50;
-    padding:16px;
-    padding-bottom:40px;
-    overflow-y:auto;
-  }
-  #qaCardWrap{
-    position:relative;
-    width:100%;
-    background:#000;
-    border-radius: var(--radius);
-    overflow:hidden;
-    cursor:pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #qaCardImg{
-    width:100%;
-    display:block;
-  }
-  .qa-mask{
-    position:absolute;
-    background: var(--panel);
-    border: 1px dashed var(--text-dim);
-    box-sizing:border-box;
-    display:none;
-  }
-  #qaMaskTop   { top:0; left:0; right:0; }
-  #qaMaskBottom{ bottom:0; left:0; right:0; }
-  #qaMaskLeft  { top:0; bottom:0; left:0; }
-  #qaMaskRight { top:0; bottom:0; right:0; }
 </style>
 </head>
 <body>
@@ -414,16 +335,7 @@
 <div class="panel">
   <div id="cameraWrap">
     <video id="video" autoplay playsinline muted></video>
-    <div id="frame" class="size-medium">
-      <div id="previewMaskTop" class="preview-mask"></div>
-      <div id="previewMaskBottom" class="preview-mask"></div>
-      <div id="previewMaskLeft" class="preview-mask"></div>
-      <div id="previewMaskRight" class="preview-mask"></div>
-      <div id="maskHandleTop" class="mask-handle" style="display:none;"></div>
-      <div id="maskHandleBottom" class="mask-handle" style="display:none;"></div>
-      <div id="maskHandleLeft" class="mask-handle" style="display:none;"></div>
-      <div id="maskHandleRight" class="mask-handle" style="display:none;"></div>
-    </div>
+    <div id="frame" class="size-medium"></div>
     <div id="flash"></div>
     <div id="zoomControl">
       <span id="zoomVal">1.0x</span>
@@ -498,16 +410,10 @@
       <option value="a4">A4で作る</option>
       <option value="a5">A5で作る</option>
     </select>
-  </div>
-  <!-- 列数を1〜8列の間で自由に選べるステッパー。
-       ボタンで±1ずつ変えられるので、数字入力が苦手でも操作しやすい -->
-  <div class="row" style="align-items:center;">
-    <span class="custom-slider-label" style="width:auto;">列数</span>
-    <button id="colsMinus" class="btn-secondary" style="flex:0 0 44px;">－</button>
-    <input type="number" id="layoutCols" min="1" max="8" value="2" readonly
-           style="width:56px; text-align:center; background:#2a3140; color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
-    <button id="colsPlus" class="btn-secondary" style="flex:0 0 44px;">＋</button>
-    <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
+    <select id="layoutCols">
+      <option value="1">1列（大きく表示）</option>
+      <option value="2" selected>2列（たくさん入る）</option>
+    </select>
   </div>
   <div class="row">
     <button id="pdfBtn" class="btn-main" disabled>PDFを作成してダウンロード</button>
@@ -517,68 +423,9 @@
   </div>
 </div>
 
-<!-- ===== 一問一答（フラッシュカード）機能 =====
-     PDFにはせず、専用の「練習画面」を別に開いて使う機能。
-     隠す範囲(上下左右)は、下のスライダーではなく、カメラ枠の
-     ふち(境界線)を直接タップ＆ドラッグして伸び縮みさせる方式にした -->
-<div class="panel">
-  <div class="row">
-    <button id="qaToggleBtn" class="btn-toggle" style="flex:1">一問一答モード（隠す範囲の編集）を有効にする</button>
-  </div>
-  <div id="maskHint" class="sub" style="display:none; margin:6px 0 0;">
-    カメラ枠のふちに出た白いつまみを指でつかんでドラッグすると、隠す範囲(グレーの膜)を伸び縮みできます。
-  </div>
-</div>
-
-<!-- ===== 一問一答セット(名前をつけて保存) =====
-     今撮っている写真をひとまとまりの「セット」として名前をつけて保存し、
-     あとから選んで練習できるようにする機能。ブラウザの中(localStorage)に
-     保存されるので、同じNetlifyのURLで開いたときだけ復元できる -->
-<div class="panel">
-  <div class="row">
-    <button id="qaViewBtn" class="btn-main" disabled>今の写真で練習する（保存せずに）</button>
-  </div>
-  <div class="row">
-    <button id="saveDeckBtn" class="btn-secondary" style="flex:1" disabled>今の写真を名前をつけてセットに保存</button>
-  </div>
-  <div class="row">
-    <select id="deckSelect"><option value="">（保存したセットなし）</option></select>
-  </div>
-  <div class="row">
-    <button id="practiceDeckBtn" class="btn-main" disabled>このセットで練習する</button>
-    <button id="deleteDeckBtn" class="btn-danger" disabled>削除</button>
-  </div>
-</div>
-
-<!-- ===== 一問一答：練習画面(全画面) =====
-     開いている間は他のパネルの上に覆いかぶさって表示される、
-     独立した練習用の画面。画像をタップすると隠した部分の
-     表示/非表示が切り替わり、前へ/次へで別のカードに移動する -->
-<div id="qaViewer">
-  <h1 id="qaDeckTitle" style="margin-bottom:2px;">一問一答</h1>
-  <div id="qaCountLabel" style="margin-bottom:12px; font-size:14px; color: var(--text-dim);">
-    カード <b id="qaIndexNum" style="color:var(--text);">1</b> / <span id="qaTotalNum">1</span>
-  </div>
-  <div id="qaCardWrap">
-    <img id="qaCardImg" src="" alt="カード">
-    <div id="qaMaskTop" class="qa-mask"></div>
-    <div id="qaMaskBottom" class="qa-mask"></div>
-    <div id="qaMaskLeft" class="qa-mask"></div>
-    <div id="qaMaskRight" class="qa-mask"></div>
-  </div>
-  <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
-  <div class="row">
-    <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
-    <button id="qaNextBtn" class="btn-secondary" style="flex:1">次へ →</button>
-  </div>
-  <div class="row">
-    <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
-  </div>
-</div>
-
 <!-- PDF作成に使うライブラリは、JS側で複数の読み込み元を
      順番に試すようにしています(下のscript内のensureJsPDF)。
-     どこか1つが繋がらなくても他で読み込めるためです。 -->
+     どこか1つが繋がらなくても他で読み込めるようにするためです。 -->
 
 <script>
 /* =========================================================
@@ -653,52 +500,6 @@ const templateSelect   = document.getElementById('templateSelect');
 const saveTemplateBtn  = document.getElementById('saveTemplateBtn');
 const applyTemplateBtn = document.getElementById('applyTemplateBtn');
 const deleteTemplateBtn= document.getElementById('deleteTemplateBtn');
-const colsMinus   = document.getElementById('colsMinus');
-const colsPlus    = document.getElementById('colsPlus');
-
-// ---- 一問一答(マスク)関連 ----
-const qaToggleBtn   = document.getElementById('qaToggleBtn');
-const maskHint      = document.getElementById('maskHint');
-const previewMaskTop    = document.getElementById('previewMaskTop');
-const previewMaskBottom = document.getElementById('previewMaskBottom');
-const previewMaskLeft   = document.getElementById('previewMaskLeft');
-const previewMaskRight  = document.getElementById('previewMaskRight');
-const maskHandleTop    = document.getElementById('maskHandleTop');
-const maskHandleBottom = document.getElementById('maskHandleBottom');
-const maskHandleLeft   = document.getElementById('maskHandleLeft');
-const maskHandleRight  = document.getElementById('maskHandleRight');
-
-const qaViewBtn      = document.getElementById('qaViewBtn');
-const saveDeckBtn    = document.getElementById('saveDeckBtn');
-const deckSelect     = document.getElementById('deckSelect');
-const practiceDeckBtn= document.getElementById('practiceDeckBtn');
-const deleteDeckBtn  = document.getElementById('deleteDeckBtn');
-
-const qaViewer    = document.getElementById('qaViewer');
-const qaDeckTitle = document.getElementById('qaDeckTitle');
-const qaCardWrap  = document.getElementById('qaCardWrap');
-const qaCardImg   = document.getElementById('qaCardImg');
-const qaIndexNum  = document.getElementById('qaIndexNum');
-const qaTotalNum  = document.getElementById('qaTotalNum');
-const qaMaskTop    = document.getElementById('qaMaskTop');
-const qaMaskBottom = document.getElementById('qaMaskBottom');
-const qaMaskLeft   = document.getElementById('qaMaskLeft');
-const qaMaskRight  = document.getElementById('qaMaskRight');
-const qaPrevBtn   = document.getElementById('qaPrevBtn');
-const qaNextBtn   = document.getElementById('qaNextBtn');
-const qaCloseBtn  = document.getElementById('qaCloseBtn');
-
-// 一問一答モードが有効かどうか、隠す範囲(%)は何%か、を保持しておく変数。
-// ページを開き直しても同じ設定を使えるよう、localStorageにも保存する
-const QA_SETTINGS_KEY = 'wordQaMaskSettings';
-const QA_DECKS_KEY = 'wordQaDecks';
-let qaEnabled = false;
-let maskTop = 0, maskBottom = 0, maskLeft = 0, maskRight = 50;
-
-// 練習画面で今どのセットを表示しているか({name, shots, mask})
-let qaPractice = { name: '', shots: [], mask: { top:0, bottom:0, left:0, right:50 } };
-let qaIndex = 0;          // 練習画面で今何枚目を見ているか
-let qaRevealed = false;   // 今のカードが「隠した部分を表示中」かどうか
 
 // 撮影枚数の上限は撤廃しました（以前は20枚→40枚でしたが、今は無制限です）。
 // 撮った画像を貯めておく配列。dataUrlに加えてwidth/heightも
@@ -846,247 +647,6 @@ deleteTemplateBtn.addEventListener('click', ()=>{
 });
 
 refreshTemplateSelect(); // ページを開いた時点で保存済みテンプレート一覧を表示
-
-/* ---------- PDFの列数を自由に選べるステッパー(1〜8列) ---------- */
-colsMinus.addEventListener('click', ()=>{
-  const v = Math.max(1, parseInt(layoutColsSel.value,10) - 1);
-  layoutColsSel.value = v;
-});
-colsPlus.addEventListener('click', ()=>{
-  const v = Math.min(8, parseInt(layoutColsSel.value,10) + 1);
-  layoutColsSel.value = v;
-});
-
-/* ---------- 一問一答：隠す範囲(マスク)機能 ----------
-   ONにすると、カメラ枠のふちに白いつまみが出てくる。
-   それを指でつかんでドラッグすると、隠す範囲(半透明の膜)を
-   上下左右それぞれ自由に伸び縮みできる。
-   ここで決めた割合は、「今の写真で練習する」やセット保存時に使われる。
-*/
-function loadQaSettings(){
-  try{
-    const saved = JSON.parse(localStorage.getItem(QA_SETTINGS_KEY));
-    if(saved){
-      maskTop = saved.top ?? 0;
-      maskBottom = saved.bottom ?? 0;
-      maskLeft = saved.left ?? 0;
-      maskRight = saved.right ?? 50;
-    }
-  }catch(e){ /* 保存データがなければ初期値のまま */ }
-  updateMaskDisplays();
-}
-
-function saveQaSettings(){
-  localStorage.setItem(QA_SETTINGS_KEY, JSON.stringify({
-    top: maskTop, bottom: maskBottom, left: maskLeft, right: maskRight
-  }));
-}
-
-// マスクの数値を、カメラ枠上の膜(previewMask)とつまみ(handle)の
-// 位置・大きさの両方に反映する
-function updateMaskDisplays(){
-  previewMaskTop.style.height = maskTop + '%';
-  previewMaskBottom.style.height = maskBottom + '%';
-  previewMaskLeft.style.width = maskLeft + '%';
-  previewMaskRight.style.width = maskRight + '%';
-
-  maskHandleTop.style.top = maskTop + '%';
-  maskHandleBottom.style.top = (100 - maskBottom) + '%';
-  maskHandleLeft.style.left = maskLeft + '%';
-  maskHandleRight.style.left = (100 - maskRight) + '%';
-}
-
-/* ---------- つまみをドラッグして数値を変える共通処理 ----------
-   axis: 'x'か'y'。ドラッグする向き(横方向か縦方向か)
-   invert: trueなら「ドラッグする向きと増減の向きが逆」(下/右の膜用)
-   setter: ドラッグ中の新しい値(0〜90)を受け取って反映する関数
-   getter: 現在の値を返す関数
-*/
-function makeMaskHandleDraggable(handleEl, axis, invert, getter, setter){
-  handleEl.addEventListener('pointerdown', (e)=>{
-    e.preventDefault();
-    handleEl.setPointerCapture(e.pointerId);
-    const frameRect = frameEl.getBoundingClientRect();
-    const sizePx = axis === 'y' ? frameRect.height : frameRect.width;
-    const startPos = axis === 'y' ? e.clientY : e.clientX;
-    const startVal = getter();
-
-    function onMove(ev){
-      const curPos = axis === 'y' ? ev.clientY : ev.clientX;
-      let deltaPct = ((curPos - startPos) / sizePx) * 100;
-      if(invert) deltaPct = -deltaPct;
-      const newVal = Math.round(Math.max(0, Math.min(90, startVal + deltaPct)));
-      setter(newVal);
-      updateMaskDisplays();
-    }
-    function onUp(){
-      handleEl.removeEventListener('pointermove', onMove);
-      handleEl.removeEventListener('pointerup', onUp);
-      saveQaSettings();
-    }
-    handleEl.addEventListener('pointermove', onMove);
-    handleEl.addEventListener('pointerup', onUp);
-  });
-}
-
-makeMaskHandleDraggable(maskHandleTop,    'y', false, ()=>maskTop,    v=>maskTop=v);
-makeMaskHandleDraggable(maskHandleBottom, 'y', true,  ()=>maskBottom, v=>maskBottom=v);
-makeMaskHandleDraggable(maskHandleLeft,   'x', false, ()=>maskLeft,   v=>maskLeft=v);
-makeMaskHandleDraggable(maskHandleRight,  'x', true,  ()=>maskRight,  v=>maskRight=v);
-
-qaToggleBtn.addEventListener('click', ()=>{
-  qaEnabled = !qaEnabled;
-  qaToggleBtn.classList.toggle('active', qaEnabled);
-  maskHint.style.display = qaEnabled ? 'block' : 'none';
-  // カメラ枠の上の膜プレビュー＆つまみも、ON/OFFに合わせて表示/非表示
-  [previewMaskTop, previewMaskBottom, previewMaskLeft, previewMaskRight,
-   maskHandleTop, maskHandleBottom, maskHandleLeft, maskHandleRight].forEach(el=>{
-    el.style.display = qaEnabled ? 'block' : 'none';
-  });
-});
-
-loadQaSettings();
-
-/* ---------- 一問一答：名前をつけてセットとして保存 ----------
-   今撮っている写真ひとまとまりに名前をつけて、隠す範囲の設定と一緒に
-   ブラウザの中(localStorage)へ保存しておく機能。あとから選んで練習できる */
-function loadDecks(){
-  try{
-    return JSON.parse(localStorage.getItem(QA_DECKS_KEY)) || [];
-  }catch(e){
-    return [];
-  }
-}
-function saveDecksToStorage(list){
-  localStorage.setItem(QA_DECKS_KEY, JSON.stringify(list));
-}
-function refreshDeckSelect(){
-  const list = loadDecks();
-  deckSelect.innerHTML = '';
-  if(list.length === 0){
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '（保存したセットなし）';
-    deckSelect.appendChild(opt);
-    practiceDeckBtn.disabled = true;
-    deleteDeckBtn.disabled = true;
-    return;
-  }
-  list.forEach(d=>{
-    const opt = document.createElement('option');
-    opt.value = d.name;
-    opt.textContent = d.name + '（' + d.shots.length + '枚）';
-    deckSelect.appendChild(opt);
-  });
-  practiceDeckBtn.disabled = false;
-  deleteDeckBtn.disabled = false;
-}
-
-saveDeckBtn.addEventListener('click', ()=>{
-  if(shots.length === 0) return;
-  const name = prompt('セットの名前を入力してください', '');
-  if(!name) return;
-
-  const list = loadDecks();
-  const newDeck = {
-    name: name,
-    shots: shots.map(s => ({ dataUrl:s.dataUrl, width:s.width, height:s.height })),
-    mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }
-  };
-  const existingIdx = list.findIndex(d => d.name === name);
-  if(existingIdx >= 0){
-    list[existingIdx] = newDeck;
-  }else{
-    list.push(newDeck);
-  }
-  try{
-    saveDecksToStorage(list);
-    refreshDeckSelect();
-    deckSelect.value = name;
-    setStatus('セット「' + name + '」を保存しました');
-  }catch(e){
-    setStatus('保存に失敗しました。写真の枚数を減らすか、不要なセットを削除してから試してください。', true);
-  }
-});
-
-practiceDeckBtn.addEventListener('click', ()=>{
-  const name = deckSelect.value;
-  if(!name) return;
-  const list = loadDecks();
-  const deck = list.find(d => d.name === name);
-  if(!deck) return;
-  openQaViewer(deck.name, deck.shots, deck.mask);
-});
-
-deleteDeckBtn.addEventListener('click', ()=>{
-  const name = deckSelect.value;
-  if(!name) return;
-  if(!confirm('セット「' + name + '」を削除します。よろしいですか？')) return;
-  let list = loadDecks();
-  list = list.filter(d => d.name !== name);
-  saveDecksToStorage(list);
-  refreshDeckSelect();
-  setStatus('セット「' + name + '」を削除しました');
-});
-
-refreshDeckSelect();
-
-/* ---------- 一問一答：練習画面(全画面) ----------
-   name/shots/maskを指定しないで呼ぶと「今の写真」で練習する。
-   セットを指定した場合はそのセットの内容で練習する */
-function openQaViewer(name, practiceShots, mask){
-  const list = practiceShots || shots;
-  if(list.length === 0) return;
-  qaPractice = {
-    name: name || '',
-    shots: list,
-    mask: mask || { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }
-  };
-  qaDeckTitle.textContent = qaPractice.name ? ('一問一答：' + qaPractice.name) : '一問一答：今の写真';
-  qaIndex = 0;
-  qaViewer.style.display = 'block';
-  renderQaCard();
-}
-
-function renderQaCard(){
-  const shot = qaPractice.shots[qaIndex];
-  qaCardImg.src = shot.dataUrl;
-  qaIndexNum.textContent = qaIndex + 1;
-  qaTotalNum.textContent = qaPractice.shots.length;
-  qaRevealed = false;
-  applyQaMaskVisibility();
-}
-
-// 隠す範囲(qaMaskTop等)の大きさをセットの設定に合わせて、表示/非表示を切り替える
-function applyQaMaskVisibility(){
-  const m = qaPractice.mask;
-  [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{
-    el.style.display = qaRevealed ? 'none' : 'block';
-  });
-  qaMaskTop.style.height = m.top + '%';
-  qaMaskBottom.style.height = m.bottom + '%';
-  qaMaskLeft.style.width = m.left + '%';
-  qaMaskRight.style.width = m.right + '%';
-}
-
-qaCardWrap.addEventListener('click', ()=>{
-  qaRevealed = !qaRevealed;
-  applyQaMaskVisibility();
-});
-
-qaViewBtn.addEventListener('click', ()=> openQaViewer());
-
-qaPrevBtn.addEventListener('click', ()=>{
-  qaIndex = (qaIndex - 1 + qaPractice.shots.length) % qaPractice.shots.length;
-  renderQaCard();
-});
-qaNextBtn.addEventListener('click', ()=>{
-  qaIndex = (qaIndex + 1) % qaPractice.shots.length;
-  renderQaCard();
-});
-qaCloseBtn.addEventListener('click', ()=>{
-  qaViewer.style.display = 'none';
-});
 
 /* ---------- 枠の向き切り替え(横向き/縦向き) ----------
    縦向きにすると、CSS側で同じサイズの数値の width/height を
@@ -1311,18 +871,6 @@ function renderThumbs(){
   countNumEl.textContent = shots.length;
   shootBtn.disabled = !currentStream; // 撮影枚数の上限は撤廃したので、カメラが起動していれば撮影可能
   pdfBtn.disabled = shots.length === 0;
-  qaViewBtn.disabled = shots.length === 0;
-  saveDeckBtn.disabled = shots.length === 0;
-  // 練習画面が「今の写真」を見ている最中(＝保存済みセットではない)場合だけ、
-  // 撮影し直して枚数が変わったことを画面にも反映する
-  if(qaViewer.style.display === 'block' && qaPractice.shots === shots){
-    if(shots.length === 0){
-      qaViewer.style.display = 'none';
-    }else{
-      if(qaIndex >= shots.length) qaIndex = shots.length - 1;
-      renderQaCard();
-    }
-  }
 }
 
 /* ---------- 並び順をランダムにする ----------
@@ -1349,18 +897,30 @@ resetBtn.addEventListener('click', ()=>{
 });
 
 /* ---------- PDF作成 ----------
-   単語カードを、ページの上から下へ順番に並べていきます。
+   横長の単語カードを、ページの上から下へ順番に並べていきます。
    入りきらなくなったら自動で次のページに移ります。
-   列数(1〜8)は「列数」のステッパーで自由に選べます。
 */
-function buildAndDownloadPdf(filename){
-  if(shots.length === 0) return false;
+pdfBtn.addEventListener('click', ()=>{
+  if(shots.length === 0) return;
 
+  // jsPDFがまだ読み込めていない場合は、ここで待たずに
+  // (待つとiOSでダウンロードがブロックされる可能性があるため)
+  // エラーを伝えて裏で再読み込みを試みる。もう一度ボタンを
+  // 押してもらえば、大抵は読み込みが間に合っている。
   if(!(window.jspdf && window.jspdf.jsPDF)){
-    setStatus('PDF機能の読み込みに失敗しました。電波の良い場所でもう一度ボタンを押してみてください。', true);
+    setStatus('PDF機能の読み込みに失敗しました。電波の良い場所でもう一度「PDFを作成」を押してみてください。', true);
     ensureJsPDF();
-    return false;
+    return;
   }
+
+  // 前に途中まで動いて固まっていた原因：処理の途中でawait(非同期の待ち)が
+  // 入っていたため、iOSのSafariが「ボタンを押した操作の続き」とみなさなくなり、
+  // 最後のダウンロードがブロックされていた可能性が高い。
+  // → 画像のサイズは撮影時に保存済みなので、ここでは一切待たずに
+  //    全部その場で(同期処理で)完結させる。
+
+  pdfBtn.disabled = true;
+  setStatus('PDFを作成しています…');
 
   try{
     const { jsPDF } = window.jspdf;
@@ -1373,13 +933,13 @@ function buildAndDownloadPdf(filename){
 
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 4;         // 外側の余白(mm)。より詰めて1枚に多く入るようにしている
-    const gap = 1.5;          // 縦方向のカード同士の間隔(mm)
-    const columnGap = 1.5;    // 列と列の間隔(mm)
-    const columns = Math.max(1, Math.min(8, parseInt(layoutColsSel.value, 10) || 1));
+    const margin = 8;        // 外側の余白(mm)。詰めて1枚により多く入るようにしている
+    const gap = 3;            // 縦方向のカード同士の間隔(mm)
+    const columnGap = 4;      // 2列にしたときの左右の間隔(mm)
+    const columns = parseInt(layoutColsSel.value, 10) || 1;
 
     const usableW = pageW - margin*2;
-    const colW = (usableW - columnGap*(columns-1)) / columns;
+    const colW = columns === 2 ? (usableW - columnGap) / 2 : usableW;
 
     let cursorY = margin;
 
@@ -1404,28 +964,14 @@ function buildAndDownloadPdf(filename){
       cursorY += rowH + gap;
     }
 
-    doc.save(filename);
-    return true;
+    doc.save('単語帳.pdf');
+    setStatus('PDFをダウンロードしました');
   }catch(err){
     console.error(err);
     setStatus('PDFの作成に失敗しました：' + err.message, true);
-    return false;
+  }finally{
+    pdfBtn.disabled = false;
   }
-}
-
-pdfBtn.addEventListener('click', ()=>{
-  // 前に途中まで動いて固まっていた原因：処理の途中でawait(非同期の待ち)が
-  // 入っていたため、iOSのSafariが「ボタンを押した操作の続き」とみなさなくなり、
-  // 最後のダウンロードがブロックされていた可能性が高い。
-  // → 画像のサイズは撮影時に保存済みなので、ここでは一切待たずに
-  //    全部その場で(同期処理で)完結させる。
-  pdfBtn.disabled = true;
-  setStatus('PDFを作成しています…');
-  const ok = buildAndDownloadPdf('単語帳.pdf');
-  if(ok) setStatus('PDFをダウンロードしました');
-  // 失敗した場合のエラーメッセージはbuildAndDownloadPdfの中で
-  // すでに表示済みなので、ここで上書きしない
-  pdfBtn.disabled = false;
 });
 
 /* 初期状態の見た目を整える */
