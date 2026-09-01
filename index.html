@@ -535,6 +535,193 @@
     padding: 30px 0;
     display:none;
   }
+
+  /* ---- 選択モード：サムネイル／一覧アイテムのチェック表示 ---- */
+  .thumb.selectable, .qa-list-item.selectable{
+    cursor:pointer;
+  }
+  .select-check{
+    position:absolute;
+    top:4px; left:4px;
+    width:22px; height:22px;
+    border-radius:50%;
+    background:rgba(0,0,0,0.55);
+    border:2px solid #fff;
+    z-index:4;
+    display:none;
+  }
+  .thumb.select-mode .select-check, .qa-list-item.select-mode .select-check{
+    display:block;
+  }
+  .thumb.selected .select-check, .qa-list-item.selected .select-check{
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .thumb.selected, .qa-list-item.selected{
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .hint-btn{
+    position:absolute;
+    top:4px; left:4px;
+    z-index:4;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    border-radius:8px;
+    font-size:11px;
+    padding:3px 6px;
+  }
+  .thumb.select-mode .hint-btn{ display:none; }
+
+  /* ---- 選択モード時の一括操作バー ---- */
+  .bulk-bar{
+    display:none;
+    gap:8px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .bulk-bar.active{ display:flex; }
+  .bulk-bar button{ flex:1; }
+
+  /* ---- ヒント表示欄(答えと一緒に開く) ---- */
+  .hint-box{
+    display:none;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-radius:10px;
+    padding:8px 10px;
+    margin-top:8px;
+    font-size:13px;
+    color: var(--text);
+    white-space:pre-wrap;
+  }
+  .hint-box.show{ display:block; }
+
+  /* ---- 練習画面：スクロールしても常に見える操作バー ---- */
+  #qaStickyBar{
+    position:sticky;
+    bottom:0;
+    left:0; right:0;
+    background: var(--bg);
+    padding:8px 0 4px;
+    margin-top:10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    border-top:1px solid #2a3140;
+    z-index:20;
+  }
+  #qaStickyBar .row{ margin-top:0; }
+  #qaSaveOrderBtn.dirty{
+    background: var(--danger);
+    color:#fff;
+    font-weight:700;
+  }
+
+  /* ---- ストップウォッチ ---- */
+  #qaStopwatch{
+    align-items:center;
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding:8px 10px;
+  }
+  #qaStopwatchTime{
+    font-size:20px;
+    font-weight:700;
+    font-variant-numeric: tabular-nums;
+    flex:1;
+  }
+
+  /* ---- フォルダ／セットのブラウザ表示(最初は一覧だけ、開くと中身) ---- */
+  .browse-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#242b38;
+    border-radius:10px;
+    padding:10px 12px;
+    margin-bottom:8px;
+  }
+  .browse-item .browse-main{
+    flex:1;
+    min-width:0;
+    cursor:pointer;
+  }
+  .browse-item .browse-title{
+    font-size:14px;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .browse-item .browse-sub{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .browse-item .browse-actions{
+    display:flex;
+    gap:6px;
+    flex-shrink:0;
+  }
+  .browse-item .browse-actions button{
+    padding:6px 8px;
+    font-size:12px;
+  }
+  .browse-item input[type="checkbox"]{
+    width:20px; height:20px;
+    flex-shrink:0;
+    display:none;
+  }
+  .browse-item.select-mode input[type="checkbox"]{ display:block; }
+  .browse-empty{
+    color: var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    padding:16px 0;
+  }
+
+  /* ---- 汎用ピッカー(移動先などを選ぶための簡易オーバーレイ) ---- */
+  #pickerOverlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:100;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  #pickerOverlay.show{ display:flex; }
+  #pickerSheet{
+    background: var(--panel);
+    border-radius: 16px 16px 0 0;
+    width:100%;
+    max-width:520px;
+    max-height:75vh;
+    overflow-y:auto;
+    padding:16px;
+  }
+  #pickerTitle{
+    font-size:15px;
+    font-weight:700;
+    margin-bottom:10px;
+  }
+  .picker-option{
+    width:100%;
+    text-align:left;
+    background:#242b38;
+    color:var(--text);
+    border-radius:10px;
+    padding:12px;
+    margin-bottom:8px;
+    font-size:14px;
+  }
+  .picker-cancel{
+    width:100%;
+    background:transparent;
+    color:var(--text-dim);
+    border:1px solid #3a4150;
+  }
 </style>
 </head>
 <body>
@@ -618,6 +805,11 @@
   <div id="countLabel">撮影済み：<b id="countNum">0</b>枚</div>
   <div class="row">
     <button id="shuffleBtn" class="btn-secondary" style="flex:1">並び順をランダムにする</button>
+    <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
+  </div>
+  <div id="bulkBar" class="bulk-bar">
+    <button id="bulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
+    <button id="bulkMoveBtn" class="btn-secondary">選んだカードをセットへ移動</button>
   </div>
   <div id="thumbs"></div>
   <div id="emptyNote" class="empty-note">まだ撮影した単語がありません</div>
@@ -677,17 +869,47 @@
     <button id="newFolderBtn" class="btn-secondary">＋新規フォルダ</button>
   </div>
   <div class="row">
-    <button id="deleteFolderBtn" class="btn-danger" style="flex:1">選んだフォルダを削除</button>
-  </div>
-  <div class="row">
     <button id="saveDeckBtn" class="btn-secondary" style="flex:1" disabled>今の写真を名前をつけてセットに保存（選んだフォルダに入ります）</button>
   </div>
+</div>
+
+<!-- ===== フォルダ／セットの一覧 =====
+     最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
+     その中のセット一覧が表示される（中身は最初は出さない） -->
+<div class="panel">
+  <div id="folderListPanel">
+    <div class="sub" style="margin-bottom:8px;">フォルダを押すと中のセットが表示されます</div>
+    <div id="folderListItems"></div>
+  </div>
+
+  <div id="deckListPanel" style="display:none;">
+    <div class="row">
+      <button id="backToFoldersBtn" class="btn-secondary" style="flex:1">← フォルダ一覧に戻る</button>
+    </div>
+    <div class="sub" id="deckListTitle" style="margin:8px 0;"></div>
+    <div class="row">
+      <button id="deckSelectModeBtn" class="btn-secondary" style="flex:1">セットを選択する</button>
+    </div>
+    <div id="deckBulkBar" class="bulk-bar">
+      <button id="deckBulkMoveBtn" class="btn-secondary">選んだセットを別フォルダへ移動</button>
+      <button id="deckBulkDeleteBtn" class="btn-danger">選んだセットを削除</button>
+    </div>
+    <div id="deckListItems"></div>
+  </div>
+</div>
+
+<!-- ===== データの引き継ぎ(端末間の同期の代わり) =====
+     自動で他の端末と同期する仕組みはこのアプリには無いため、
+     代わりに全データを1つのファイルに書き出して、それを別の端末で
+     読み込むことでセットを引き継げるようにしている -->
+<div class="panel">
+  <div class="sub" style="margin-bottom:8px;">別の端末とデータを共有したいときは、ここからファイルに書き出して、別の端末でそのファイルを読み込んでください。</div>
   <div class="row">
-    <select id="deckSelect"><option value="">（保存したセットなし）</option></select>
+    <button id="exportDataBtn" class="btn-secondary" style="flex:1">全データを書き出す（ファイル保存）</button>
   </div>
   <div class="row">
-    <button id="practiceDeckBtn" class="btn-main" disabled>このセットで練習する</button>
-    <button id="deleteDeckBtn" class="btn-danger" disabled>削除</button>
+    <button id="importDataBtn" class="btn-secondary" style="flex:1">ファイルからデータを読み込む</button>
+    <input type="file" id="importDataInput" accept="application/json" style="display:none;">
   </div>
 </div>
 
@@ -702,6 +924,12 @@
     ／暗記済み <b id="qaMemNum" style="color:var(--text);">0</b> / <span id="qaAllNum">0</span>
   </div>
 
+  <div class="row" id="qaStopwatch">
+    <span id="qaStopwatchTime">00:00.0</span>
+    <button id="qaStopwatchToggleBtn" class="btn-secondary">開始</button>
+    <button id="qaStopwatchResetBtn" class="btn-secondary">リセット</button>
+  </div>
+
   <div class="qa-sub-row">
     <button id="qaModeOneBtn" class="btn-toggle active">1枚ずつ表示</button>
     <button id="qaModeListBtn" class="btn-toggle">一覧表示（長押しで並べ替え）</button>
@@ -710,9 +938,6 @@
     <button id="qaFilterAllBtn" class="btn-toggle active" data-filter="all">全部表示</button>
     <button id="qaFilterUnBtn" class="btn-toggle" data-filter="unmemorized">未暗記のみ</button>
     <button id="qaFilterMemBtn" class="btn-toggle" data-filter="memorized">暗記済みのみ</button>
-  </div>
-  <div class="row">
-    <button id="qaShuffleBtn" class="btn-secondary" style="flex:1">シャッフル</button>
   </div>
 
   <div id="qaOneWrap">
@@ -723,10 +948,12 @@
       <div id="qaMaskLeft" class="qa-mask"></div>
       <div id="qaMaskRight" class="qa-mask"></div>
       <div class="qa-card-actions">
+        <button id="qaHintBtn">ヒント編集</button>
         <button id="qaMemBtn">暗記済みにする</button>
         <button id="qaDelBtn" class="qa-del-single">削除</button>
       </div>
     </div>
+    <div id="qaHintBox" class="hint-box"></div>
     <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
     <div class="row">
       <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
@@ -737,8 +964,28 @@
   <div id="qaList"></div>
   <div id="qaEmptyFilter" class="qa-empty-filter">このフィルターに当てはまるカードがありません</div>
 
-  <div class="row">
-    <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
+  <div id="qaStickyBar">
+    <div class="qa-sub-row">
+      <button id="qaSelectModeBtn" class="btn-toggle">カードを選択する</button>
+      <button id="qaShuffleBtn" class="btn-toggle">シャッフル</button>
+    </div>
+    <div id="qaBulkBar" class="bulk-bar">
+      <button id="qaBulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
+      <button id="qaBulkMoveBtn" class="btn-secondary">選んだカードを別セットへ移動</button>
+    </div>
+    <div class="row">
+      <button id="qaSaveOrderBtn" class="btn-secondary" style="flex:1" disabled>並び替えを保存</button>
+      <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 移動先などを選ぶための簡易ピッカー ===== -->
+<div id="pickerOverlay">
+  <div id="pickerSheet">
+    <div id="pickerTitle"></div>
+    <div id="pickerOptions"></div>
+    <button class="picker-cancel" id="pickerCancelBtn">キャンセル</button>
   </div>
 </div>
 
@@ -831,6 +1078,10 @@ const layoutColsSel = document.getElementById('layoutCols');
 const zoomSlider  = document.getElementById('zoomSlider');
 const zoomValEl   = document.getElementById('zoomVal');
 const shuffleBtn  = document.getElementById('shuffleBtn');
+const selectModeBtn = document.getElementById('selectModeBtn');
+const bulkBar        = document.getElementById('bulkBar');
+const bulkDeleteBtn  = document.getElementById('bulkDeleteBtn');
+const bulkMoveBtn    = document.getElementById('bulkMoveBtn');
 const orientRow   = document.getElementById('orientRow');
 const customPanel = document.getElementById('customPanel');
 const customWidthSlider  = document.getElementById('customWidth');
@@ -858,12 +1109,31 @@ const maskHandleRight  = document.getElementById('maskHandleRight');
 
 const qaViewBtn      = document.getElementById('qaViewBtn');
 const saveDeckBtn    = document.getElementById('saveDeckBtn');
-const deckSelect     = document.getElementById('deckSelect');
-const practiceDeckBtn= document.getElementById('practiceDeckBtn');
-const deleteDeckBtn  = document.getElementById('deleteDeckBtn');
 const folderSelect   = document.getElementById('folderSelect');
 const newFolderBtn   = document.getElementById('newFolderBtn');
-const deleteFolderBtn= document.getElementById('deleteFolderBtn');
+
+// ---- フォルダ／セットのブラウザ表示 ----
+const folderListPanel = document.getElementById('folderListPanel');
+const folderListItems = document.getElementById('folderListItems');
+const deckListPanel   = document.getElementById('deckListPanel');
+const backToFoldersBtn= document.getElementById('backToFoldersBtn');
+const deckListTitle   = document.getElementById('deckListTitle');
+const deckSelectModeBtn = document.getElementById('deckSelectModeBtn');
+const deckBulkBar     = document.getElementById('deckBulkBar');
+const deckBulkMoveBtn = document.getElementById('deckBulkMoveBtn');
+const deckBulkDeleteBtn = document.getElementById('deckBulkDeleteBtn');
+const deckListItems   = document.getElementById('deckListItems');
+
+// ---- データ書き出し／読み込み ----
+const exportDataBtn  = document.getElementById('exportDataBtn');
+const importDataBtn  = document.getElementById('importDataBtn');
+const importDataInput= document.getElementById('importDataInput');
+
+// ---- 移動先などを選ぶ簡易ピッカー ----
+const pickerOverlay  = document.getElementById('pickerOverlay');
+const pickerTitle    = document.getElementById('pickerTitle');
+const pickerOptions  = document.getElementById('pickerOptions');
+const pickerCancelBtn= document.getElementById('pickerCancelBtn');
 
 const qaViewer    = document.getElementById('qaViewer');
 const qaDeckTitle = document.getElementById('qaDeckTitle');
@@ -878,6 +1148,8 @@ const qaMaskTop    = document.getElementById('qaMaskTop');
 const qaMaskBottom = document.getElementById('qaMaskBottom');
 const qaMaskLeft   = document.getElementById('qaMaskLeft');
 const qaMaskRight  = document.getElementById('qaMaskRight');
+const qaHintBtn   = document.getElementById('qaHintBtn');
+const qaHintBox   = document.getElementById('qaHintBox');
 const qaMemBtn    = document.getElementById('qaMemBtn');
 const qaDelBtn    = document.getElementById('qaDelBtn');
 const qaPrevBtn   = document.getElementById('qaPrevBtn');
@@ -889,8 +1161,16 @@ const qaFilterAllBtn = document.getElementById('qaFilterAllBtn');
 const qaFilterUnBtn  = document.getElementById('qaFilterUnBtn');
 const qaFilterMemBtn = document.getElementById('qaFilterMemBtn');
 const qaShuffleBtn   = document.getElementById('qaShuffleBtn');
+const qaSelectModeBtn = document.getElementById('qaSelectModeBtn');
+const qaBulkBar       = document.getElementById('qaBulkBar');
+const qaBulkDeleteBtn = document.getElementById('qaBulkDeleteBtn');
+const qaBulkMoveBtn   = document.getElementById('qaBulkMoveBtn');
+const qaSaveOrderBtn  = document.getElementById('qaSaveOrderBtn');
 const qaList         = document.getElementById('qaList');
 const qaEmptyFilter  = document.getElementById('qaEmptyFilter');
+const qaStopwatchTime = document.getElementById('qaStopwatchTime');
+const qaStopwatchToggleBtn = document.getElementById('qaStopwatchToggleBtn');
+const qaStopwatchResetBtn  = document.getElementById('qaStopwatchResetBtn');
 
 // 一問一答モードが有効かどうか、隠す範囲(%)は何%か、を保持しておく変数。
 // ページを開き直しても同じ設定を使えるよう、localStorageにも保存する
@@ -909,6 +1189,49 @@ let qaMode = 'one';       // 'one'=1枚ずつ表示 / 'list'=一覧表示
 let qaFilter = 'all';     // 'all' / 'memorized' / 'unmemorized'
 let qaCursor = 0;         // 1枚ずつ表示のとき、フィルター後の並びの中で何枚目を見ているか
 let qaListRevealed = new Set(); // 一覧表示で、今どのカードの答えを開いているか(カードのidを保持)
+let qaOrderDirty = false;  // 並べ替えをまだ保存していない状態かどうか
+let qaSelectMode = false;  // カード選択モード(一覧表示のとき)が有効かどうか
+let qaSelectedIds = new Set(); // 選択中のカードのid
+
+// ---- ストップウォッチ ----
+let swElapsed = 0;      // これまでに経過した時間(ミリ秒)
+let swStartedAt = null; // 計測中なら開始時刻(performance.now())、停止中はnull
+let swTimer = null;
+
+function formatStopwatch(ms){
+  const totalSec = ms / 1000;
+  const m = Math.floor(totalSec / 60);
+  const s = Math.floor(totalSec % 60);
+  const d = Math.floor((ms % 1000) / 100);
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0') + '.' + d;
+}
+function renderStopwatch(){
+  const now = swStartedAt !== null ? (swElapsed + (performance.now() - swStartedAt)) : swElapsed;
+  qaStopwatchTime.textContent = formatStopwatch(now);
+}
+function resetStopwatch(){
+  clearInterval(swTimer);
+  swTimer = null;
+  swElapsed = 0;
+  swStartedAt = null;
+  qaStopwatchToggleBtn.textContent = '開始';
+  renderStopwatch();
+}
+qaStopwatchToggleBtn.addEventListener('click', ()=>{
+  if(swStartedAt === null){
+    swStartedAt = performance.now();
+    swTimer = setInterval(renderStopwatch, 100);
+    qaStopwatchToggleBtn.textContent = '一時停止';
+  }else{
+    swElapsed += performance.now() - swStartedAt;
+    swStartedAt = null;
+    clearInterval(swTimer);
+    swTimer = null;
+    qaStopwatchToggleBtn.textContent = '開始';
+    renderStopwatch();
+  }
+});
+qaStopwatchResetBtn.addEventListener('click', resetStopwatch);
 
 // 撮影した写真1枚(shot)にユニークなIDを振るための小さな関数
 function makeShotId(){
@@ -1257,28 +1580,6 @@ newFolderBtn.addEventListener('click', async ()=>{
   setStatus('フォルダ「' + name + '」を作成しました');
 });
 
-deleteFolderBtn.addEventListener('click', async ()=>{
-  const name = folderSelect.value;
-  if(!name){
-    setStatus('削除するフォルダを選んでください', true);
-    return;
-  }
-  const decks = await loadDecks();
-  const inFolder = decks.filter(d => d.folder === name);
-  const warn = inFolder.length > 0
-    ? 'フォルダ「' + name + '」の中には' + inFolder.length + '個のセットがあります。フォルダを削除すると、中のセットもすべて削除されます。よろしいですか？'
-    : 'フォルダ「' + name + '」を削除します。よろしいですか？';
-  if(!confirm(warn)) return;
-
-  for(const d of inFolder){
-    await deleteDeckFromStorage(d.name);
-  }
-  await deleteFolderFromStorage(name);
-  await refreshFolderSelect();
-  await refreshDeckSelect();
-  setStatus('フォルダ「' + name + '」を削除しました');
-});
-
 async function loadDecks(){
   try{
     const db = await openDeckDB();
@@ -1339,54 +1640,274 @@ async function migrateOldDecksIfNeeded(){
   }
 }
 
-async function refreshDeckSelect(){
+/* ---------- 汎用ピッカー ----------
+   「移動先を選んでください」のような、リストから1つ選ばせる操作を
+   共通化した簡易オーバーレイ。options は { label, value } の配列。
+   選ばれたら value を、キャンセルされたら null を返す */
+function pickFromList(title, options){
+  return new Promise(resolve=>{
+    pickerTitle.textContent = title;
+    pickerOptions.innerHTML = '';
+    if(options.length === 0){
+      const p = document.createElement('div');
+      p.className = 'sub';
+      p.textContent = '選べる項目がありません';
+      pickerOptions.appendChild(p);
+    }
+    function finish(value){
+      pickerOverlay.classList.remove('show');
+      pickerCancelBtn.removeEventListener('click', onCancel);
+      resolve(value);
+    }
+    function onCancel(){ finish(null); }
+    options.forEach(opt=>{
+      const btn = document.createElement('button');
+      btn.className = 'picker-option';
+      btn.textContent = opt.label;
+      btn.addEventListener('click', ()=> finish(opt.value));
+      pickerOptions.appendChild(btn);
+    });
+    pickerCancelBtn.addEventListener('click', onCancel);
+    pickerOverlay.classList.add('show');
+  });
+}
+
+// フォルダを選ばせるための選択肢一覧(「フォルダなし」を含む)を作る
+async function folderPickOptions(){
+  const folders = await loadFolders();
+  return [{ label:'（フォルダなし）', value:'' }].concat(
+    folders.map(f => ({ label:'📁 ' + f.name, value:f.name }))
+  );
+}
+
+// 移動先の「セット」を選ばせるための選択肢一覧を作る。
+// excludeName を指定すると、そのセット自身は候補から外す
+async function deckPickOptions(excludeName){
   const list = await loadDecks();
-  const prevValue = deckSelect.value;
-  deckSelect.innerHTML = '';
-  if(list.length === 0){
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '（保存したセットなし）';
-    deckSelect.appendChild(opt);
-    practiceDeckBtn.disabled = true;
-    deleteDeckBtn.disabled = true;
+  return list
+    .filter(d => d.name !== excludeName)
+    .map(d => ({
+      label: (d.folder ? ('📁' + d.folder + ' / ') : '') + d.name + '（' + d.shots.length + '枚）',
+      value: d.name
+    }));
+}
+
+/* ---------- フォルダ／セットのブラウザ表示 ----------
+   最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
+   その中のセット一覧が表示される。フォルダを経由せず全体を
+   俯瞰したいとき用に「（フォルダなし）」も1つの棚として扱う */
+let currentBrowseFolder = null; // null=フォルダ一覧を表示中。文字列(''含む)=そのフォルダの中を表示中
+let deckSelectMode = false;
+let selectedDeckNames = new Set();
+
+async function refreshBrowseView(){
+  if(currentBrowseFolder === null){
+    await renderFolderList();
+  }else{
+    await renderDeckList();
+  }
+}
+
+async function renderFolderList(){
+  const folders = await loadFolders();
+  const decks = await loadDecks();
+  folderListItems.innerHTML = '';
+
+  const countIn = (folderName) => decks.filter(d => (d.folder || '') === folderName).length;
+
+  const makeFolderRow = (label, folderValue, deletable)=>{
+    const row = document.createElement('div');
+    row.className = 'browse-item';
+
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">' + label + '</div>' +
+      '<div class="browse-sub">' + countIn(folderValue) + '個のセット</div>';
+    main.addEventListener('click', ()=>{
+      currentBrowseFolder = folderValue;
+      folderListPanel.style.display = 'none';
+      deckListPanel.style.display = 'block';
+      deckSelectMode = false;
+      selectedDeckNames = new Set();
+      renderDeckList();
+    });
+    row.appendChild(main);
+
+    if(deletable){
+      const actions = document.createElement('div');
+      actions.className = 'browse-actions';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const inFolder = decks.filter(d => d.folder === folderValue);
+        const warn = inFolder.length > 0
+          ? 'フォルダ「' + folderValue + '」の中には' + inFolder.length + '個のセットがあります。フォルダを削除すると、中のセットもすべて削除されます。よろしいですか？'
+          : 'フォルダ「' + folderValue + '」を削除します。よろしいですか？';
+        if(!confirm(warn)) return;
+        for(const d of inFolder){
+          await deleteDeckFromStorage(d.name);
+        }
+        await deleteFolderFromStorage(folderValue);
+        await refreshFolderSelect();
+        await renderFolderList();
+        setStatus('フォルダ「' + folderValue + '」を削除しました');
+      });
+      actions.appendChild(delBtn);
+      row.appendChild(actions);
+    }
+
+    folderListItems.appendChild(row);
+  };
+
+  makeFolderRow('（フォルダなし）', '', false);
+  folders.forEach(f => makeFolderRow('📁 ' + f.name, f.name, true));
+
+  if(folders.length === 0 && decks.length === 0){
+    const note = document.createElement('div');
+    note.className = 'browse-empty';
+    note.textContent = 'まだ保存したセットがありません';
+    folderListItems.appendChild(note);
+  }
+}
+
+backToFoldersBtn.addEventListener('click', ()=>{
+  currentBrowseFolder = null;
+  deckListPanel.style.display = 'none';
+  folderListPanel.style.display = 'block';
+  renderFolderList();
+});
+
+deckSelectModeBtn.addEventListener('click', ()=>{
+  deckSelectMode = !deckSelectMode;
+  deckSelectModeBtn.classList.toggle('active', deckSelectMode);
+  selectedDeckNames = new Set();
+  deckBulkBar.classList.toggle('active', deckSelectMode);
+  renderDeckList();
+});
+
+deckBulkMoveBtn.addEventListener('click', async ()=>{
+  if(selectedDeckNames.size === 0) return;
+  const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
+  if(target === null) return;
+  const list = await loadDecks();
+  for(const name of selectedDeckNames){
+    const d = list.find(x => x.name === name);
+    if(!d) continue;
+    d.folder = target;
+    await saveDeckToStorage(d);
+  }
+  setStatus('選んだセットを移動しました');
+  deckSelectMode = false;
+  deckSelectModeBtn.classList.remove('active');
+  deckBulkBar.classList.remove('active');
+  selectedDeckNames = new Set();
+  await refreshFolderSelect();
+  await renderDeckList();
+});
+
+deckBulkDeleteBtn.addEventListener('click', async ()=>{
+  if(selectedDeckNames.size === 0) return;
+  if(!confirm('選んだ' + selectedDeckNames.size + '個のセットを削除します。よろしいですか？')) return;
+  for(const name of selectedDeckNames){
+    await deleteDeckFromStorage(name);
+  }
+  setStatus('選んだセットを削除しました');
+  deckSelectMode = false;
+  deckSelectModeBtn.classList.remove('active');
+  deckBulkBar.classList.remove('active');
+  selectedDeckNames = new Set();
+  await renderDeckList();
+});
+
+async function renderDeckList(){
+  const list = await loadDecks();
+  const decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
+  deckListTitle.textContent = currentBrowseFolder ? ('📁 ' + currentBrowseFolder) : '（フォルダなし）';
+  deckListItems.innerHTML = '';
+
+  if(decks.length === 0){
+    const note = document.createElement('div');
+    note.className = 'browse-empty';
+    note.textContent = 'このフォルダにはまだセットがありません';
+    deckListItems.appendChild(note);
     return;
   }
 
-  // フォルダなしのセットを先に、そのあとフォルダごとにoptgroupでまとめて表示する
-  const noFolder = list.filter(d => !d.folder);
-  const folders = {};
-  list.forEach(d=>{
-    if(d.folder){
-      if(!folders[d.folder]) folders[d.folder] = [];
-      folders[d.folder].push(d);
-    }
-  });
+  decks.forEach(d=>{
+    const row = document.createElement('div');
+    row.className = 'browse-item' + (deckSelectMode ? ' select-mode' : '');
 
-  noFolder.forEach(d=>{
-    const opt = document.createElement('option');
-    opt.value = d.name;
-    opt.textContent = d.name + '（' + d.shots.length + '枚）';
-    deckSelect.appendChild(opt);
-  });
-
-  Object.keys(folders).sort().forEach(folderName=>{
-    const group = document.createElement('optgroup');
-    group.label = '📁 ' + folderName;
-    folders[folderName].forEach(d=>{
-      const opt = document.createElement('option');
-      opt.value = d.name;
-      opt.textContent = d.name + '（' + d.shots.length + '枚）';
-      group.appendChild(opt);
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = selectedDeckNames.has(d.name);
+    check.addEventListener('click', (e)=> e.stopPropagation());
+    check.addEventListener('change', ()=>{
+      if(check.checked) selectedDeckNames.add(d.name);
+      else selectedDeckNames.delete(d.name);
     });
-    deckSelect.appendChild(group);
-  });
+    row.appendChild(check);
 
-  if([...deckSelect.options].some(o => o.value === prevValue)){
-    deckSelect.value = prevValue;
-  }
-  practiceDeckBtn.disabled = false;
-  deleteDeckBtn.disabled = false;
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">' + d.name + '</div>' +
+      '<div class="browse-sub">' + d.shots.length + '枚</div>';
+    main.addEventListener('click', ()=>{
+      if(deckSelectMode){
+        check.checked = !check.checked;
+        check.dispatchEvent(new Event('change'));
+        return;
+      }
+      openQaViewer(d.name, d.shots, d.mask, d);
+    });
+    row.appendChild(main);
+
+    if(!deckSelectMode){
+      const actions = document.createElement('div');
+      actions.className = 'browse-actions';
+
+      const practiceBtn = document.createElement('button');
+      practiceBtn.className = 'btn-secondary';
+      practiceBtn.textContent = '練習';
+      practiceBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openQaViewer(d.name, d.shots, d.mask, d);
+      });
+
+      const moveBtn = document.createElement('button');
+      moveBtn.className = 'btn-secondary';
+      moveBtn.textContent = '移動';
+      moveBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
+        if(target === null) return;
+        d.folder = target;
+        await saveDeckToStorage(d);
+        await refreshFolderSelect();
+        await renderDeckList();
+        setStatus('セット「' + d.name + '」を移動しました');
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(!confirm('セット「' + d.name + '」を削除します。よろしいですか？')) return;
+        await deleteDeckFromStorage(d.name);
+        await renderDeckList();
+        setStatus('セット「' + d.name + '」を削除しました');
+      });
+
+      actions.appendChild(practiceBtn);
+      actions.appendChild(moveBtn);
+      actions.appendChild(delBtn);
+      row.appendChild(actions);
+    }
+
+    deckListItems.appendChild(row);
+  });
 }
 
 saveDeckBtn.addEventListener('click', async ()=>{
@@ -1398,11 +1919,12 @@ saveDeckBtn.addEventListener('click', async ()=>{
     name: name,
     folder: folderSelect.value || '',
     // 写真ごとに記録しておいた「隠す範囲」の設定(mask)、
-    // ID、暗記済みフラグもそのまま保存する
+    // ID・暗記済みフラグ・ヒントもそのまま保存する
     shots: shots.map(s => ({
       dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask,
       id: s.id || makeShotId(),
-      memorized: !!s.memorized
+      memorized: !!s.memorized,
+      hint: s.hint || ''
     }))
   };
 
@@ -1410,8 +1932,7 @@ saveDeckBtn.addEventListener('click', async ()=>{
   setStatus('保存しています…');
   try{
     await saveDeckToStorage(newDeck);
-    await refreshDeckSelect();
-    deckSelect.value = name;
+    await refreshBrowseView();
     setStatus('セット「' + name + '」を保存しました（' + newDeck.shots.length + '枚）');
   }catch(e){
     console.error(e);
@@ -1421,28 +1942,71 @@ saveDeckBtn.addEventListener('click', async ()=>{
   }
 });
 
-practiceDeckBtn.addEventListener('click', async ()=>{
-  const name = deckSelect.value;
-  if(!name) return;
-  const list = await loadDecks();
-  const deck = list.find(d => d.name === name);
-  if(!deck) return;
-  openQaViewer(deck.name, deck.shots, deck.mask, deck);
+/* ---------- 全データの書き出し／読み込み(端末間の引き継ぎ用) ---------- */
+exportDataBtn.addEventListener('click', async ()=>{
+  try{
+    const folders = await loadFolders();
+    const decks = await loadDecks();
+    const payload = {
+      appName: '単語帳スキャナー',
+      exportedAt: new Date().toISOString(),
+      folders: folders,
+      decks: decks
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '単語帳データ.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 3000);
+    setStatus('データを書き出しました。このファイルを別の端末で読み込んでください');
+  }catch(e){
+    console.error(e);
+    setStatus('書き出しに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }
 });
 
-deleteDeckBtn.addEventListener('click', async ()=>{
-  const name = deckSelect.value;
-  if(!name) return;
-  if(!confirm('セット「' + name + '」を削除します。よろしいですか？')) return;
-  await deleteDeckFromStorage(name);
-  await refreshDeckSelect();
-  setStatus('セット「' + name + '」を削除しました');
+importDataBtn.addEventListener('click', ()=> importDataInput.click());
+
+importDataInput.addEventListener('change', async ()=>{
+  const file = importDataInput.files[0];
+  importDataInput.value = '';
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const folders = payload.folders || [];
+    const decks = payload.decks || [];
+    if(!confirm('フォルダ' + folders.length + '個・セット' + decks.length + '個を読み込みます。同じ名前のものは上書きされます。よろしいですか？')) return;
+    for(const f of folders){
+      await saveFolderToStorage(f);
+    }
+    for(const d of decks){
+      // 読み込むデータにID・ヒントが無い場合(古い書き出し)にも対応
+      d.shots = (d.shots || []).map(s => ({
+        ...s,
+        id: s.id || makeShotId(),
+        memorized: typeof s.memorized === 'boolean' ? s.memorized : false,
+        hint: s.hint || ''
+      }));
+      await saveDeckToStorage(d);
+    }
+    await refreshFolderSelect();
+    await refreshBrowseView();
+    setStatus('データを読み込みました（フォルダ' + folders.length + '個・セット' + decks.length + '個）');
+  }catch(e){
+    console.error(e);
+    setStatus('読み込みに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }
 });
 
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
   await refreshFolderSelect();
-  await refreshDeckSelect();
+  await renderFolderList();
 })();
 
 /* ---------- 一問一答：練習画面(全画面) ----------
@@ -1454,10 +2018,11 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
   const list = practiceShots || shots;
   if(list.length === 0) return;
 
-  // 古い形式のデータ(ID・暗記済みフラグが無いもの)にも対応
+  // 古い形式のデータ(ID・暗記済みフラグ・ヒントが無いもの)にも対応
   list.forEach(s=>{
     if(!s.id) s.id = makeShotId();
     if(typeof s.memorized !== 'boolean') s.memorized = false;
+    if(typeof s.hint !== 'string') s.hint = '';
   });
 
   qaPractice = {
@@ -1471,9 +2036,16 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
   qaFilter = 'all';
   qaCursor = 0;
   qaListRevealed = new Set();
+  qaOrderDirty = false;
+  qaSelectMode = false;
+  qaSelectedIds = new Set();
+  qaSelectModeBtn.classList.remove('active');
+  qaBulkBar.classList.remove('active');
+  updateQaSaveOrderBtn();
   setQaModeButtons();
   setQaFilterButtons();
   qaViewer.style.display = 'block';
+  resetStopwatch();
   renderQaAll();
 }
 
@@ -1482,7 +2054,7 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
    「今の写真」を練習中なら、上のサムネイル一覧にも反映する */
 function afterQaMutation(){
   if(qaPractice.deckRecord){
-    saveDeckToStorage(qaPractice.deckRecord).then(refreshDeckSelect).catch(err=>{
+    saveDeckToStorage(qaPractice.deckRecord).then(refreshBrowseView).catch(err=>{
       console.error(err);
       setStatus('セットの保存に失敗しました：' + (err && err.message ? err.message : '不明なエラー'), true);
     });
@@ -1490,6 +2062,28 @@ function afterQaMutation(){
     renderThumbs();
   }
 }
+
+/* ---------- 並び替えの保存ボタン(押すまでは保存されない) ---------- */
+function updateQaSaveOrderBtn(){
+  qaSaveOrderBtn.disabled = !qaOrderDirty;
+  qaSaveOrderBtn.classList.toggle('dirty', qaOrderDirty);
+}
+
+qaSaveOrderBtn.addEventListener('click', async ()=>{
+  if(!qaPractice.deckRecord || !qaOrderDirty) return;
+  qaSaveOrderBtn.disabled = true;
+  try{
+    await saveDeckToStorage(qaPractice.deckRecord);
+    qaOrderDirty = false;
+    updateQaSaveOrderBtn();
+    await refreshBrowseView();
+    setStatus('並び替えを保存しました');
+  }catch(e){
+    console.error(e);
+    setStatus('保存に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+    updateQaSaveOrderBtn();
+  }
+});
 
 // 今のフィルターに当てはまるカードの「元の配列での位置」の一覧を返す
 function getQaFilteredIndices(){
@@ -1570,6 +2164,11 @@ function applyQaMaskVisibility(shot){
   qaMaskBottom.style.height = m.bottom + '%';
   qaMaskLeft.style.width = m.left + '%';
   qaMaskRight.style.width = m.right + '%';
+
+  // ヒントは、答え(隠していた部分)を表示するのと一緒にカードの下へ展開する
+  const hasHint = shot && shot.hint;
+  qaHintBox.textContent = hasHint ? ('ヒント：' + shot.hint) : '';
+  qaHintBox.classList.toggle('show', qaRevealed && !!hasHint);
 }
 
 qaCardWrap.addEventListener('click', (e)=>{
@@ -1577,6 +2176,16 @@ qaCardWrap.addEventListener('click', (e)=>{
   qaRevealed = !qaRevealed;
   const masterIdx = Number(qaCardWrap.dataset.masterIdx);
   applyQaMaskVisibility(qaPractice.shots[masterIdx]);
+});
+
+qaHintBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  const shot = qaPractice.shots[masterIdx];
+  const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+  if(val === null) return;
+  shot.hint = val.trim();
+  afterQaMutation();
+  renderQaAll();
 });
 
 qaMemBtn.addEventListener('click', ()=>{
@@ -1614,7 +2223,75 @@ qaNextBtn.addEventListener('click', ()=>{
   renderQaAll();
 });
 qaCloseBtn.addEventListener('click', ()=>{
+  if(qaOrderDirty){
+    if(!confirm('並び替えをまだ保存していません。保存せずに閉じると、次に開いたときは元の順番に戻ります。閉じますか？')) return;
+  }
+  qaOrderDirty = false;
   qaViewer.style.display = 'none';
+  clearInterval(swTimer);
+  swTimer = null;
+});
+
+/* ---------- カード選択モード(一覧表示で、複数カードをまとめて削除／移動) ---------- */
+qaSelectModeBtn.addEventListener('click', ()=>{
+  qaSelectMode = !qaSelectMode;
+  qaSelectModeBtn.classList.toggle('active', qaSelectMode);
+  qaBulkBar.classList.toggle('active', qaSelectMode);
+  qaSelectedIds = new Set();
+  if(qaSelectMode && qaMode !== 'list'){
+    qaMode = 'list';
+    setQaModeButtons();
+  }
+  renderQaAll();
+});
+
+qaBulkDeleteBtn.addEventListener('click', ()=>{
+  if(qaSelectedIds.size === 0) return;
+  if(!confirm('選んだ' + qaSelectedIds.size + '枚のカードを削除します。よろしいですか？')) return;
+  qaPractice.shots = qaPractice.shots.filter(s => !qaSelectedIds.has(s.id));
+  qaSelectedIds = new Set();
+  afterQaMutation();
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
+  setStatus('選んだカードを削除しました');
+});
+
+qaBulkMoveBtn.addEventListener('click', async ()=>{
+  if(qaSelectedIds.size === 0) return;
+  const excludeName = qaPractice.deckRecord ? qaPractice.deckRecord.name : null;
+  const options = await deckPickOptions(excludeName);
+  options.push({ label:'＋新しいセットとして保存', value:'__new__' });
+  const target = await pickFromList('移動先のセットを選んでください', options);
+  if(target === null) return;
+
+  const moving = qaPractice.shots.filter(s => qaSelectedIds.has(s.id));
+
+  if(target === '__new__'){
+    const name = prompt('新しいセットの名前を入力してください', '');
+    if(!name) return;
+    const folder = await pickFromList('保存先のフォルダを選んでください', await folderPickOptions());
+    if(folder === null) return;
+    await saveDeckToStorage({ name: name, folder: folder, shots: moving });
+  }else{
+    const list = await loadDecks();
+    const targetDeck = list.find(d => d.name === target);
+    if(!targetDeck) return;
+    targetDeck.shots = targetDeck.shots.concat(moving);
+    await saveDeckToStorage(targetDeck);
+  }
+
+  qaPractice.shots = qaPractice.shots.filter(s => !qaSelectedIds.has(s.id));
+  qaSelectedIds = new Set();
+  afterQaMutation();
+  setStatus('選んだカードを移動しました');
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
 });
 
 /* ---------- モード切り替え(1枚ずつ／一覧) ---------- */
@@ -1664,7 +2341,7 @@ function renderQaList(filtered){
     const shot = qaPractice.shots[masterIdx];
 
     const item = document.createElement('div');
-    item.className = 'qa-list-item' + (shot.memorized ? ' memorized' : '');
+    item.className = 'qa-list-item' + (shot.memorized ? ' memorized' : '') + (qaSelectMode ? ' select-mode' : '') + (qaSelectedIds.has(shot.id) ? ' selected' : '');
     item.dataset.masterIdx = masterIdx;
 
     const imgWrap = document.createElement('div');
@@ -1672,6 +2349,10 @@ function renderQaList(filtered){
     const img = document.createElement('img');
     img.src = shot.dataUrl;
     imgWrap.appendChild(img);
+
+    const check = document.createElement('div');
+    check.className = 'select-check';
+    imgWrap.appendChild(check);
 
     const badge = document.createElement('div');
     badge.className = 'qa-list-badge';
@@ -1695,13 +2376,34 @@ function renderQaList(filtered){
     });
 
     imgWrap.addEventListener('click', ()=>{
+      if(qaSelectMode){
+        if(qaSelectedIds.has(shot.id)) qaSelectedIds.delete(shot.id);
+        else qaSelectedIds.add(shot.id);
+        renderQaAll();
+        return;
+      }
       if(qaListRevealed.has(shot.id)) qaListRevealed.delete(shot.id);
       else qaListRevealed.add(shot.id);
       renderQaAll();
     });
 
+    // ヒントは、答えを開いているカードの下に一緒に展開する
+    const hintBox = document.createElement('div');
+    hintBox.className = 'hint-box' + ((revealed && shot.hint) ? ' show' : '');
+    hintBox.textContent = shot.hint ? ('ヒント：' + shot.hint) : '';
+
     const actions = document.createElement('div');
     actions.className = 'qa-list-actions';
+
+    const hintBtn = document.createElement('button');
+    hintBtn.textContent = 'ヒント';
+    hintBtn.addEventListener('click', ()=>{
+      const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+      if(val === null) return;
+      shot.hint = val.trim();
+      afterQaMutation();
+      renderQaAll();
+    });
 
     const memBtn = document.createElement('button');
     memBtn.textContent = shot.memorized ? '未暗記に戻す' : '暗記済みにする';
@@ -1727,10 +2429,12 @@ function renderQaList(filtered){
       renderQaAll();
     });
 
+    actions.appendChild(hintBtn);
     actions.appendChild(memBtn);
     actions.appendChild(delBtn);
 
     item.appendChild(imgWrap);
+    item.appendChild(hintBox);
     item.appendChild(actions);
 
     attachQaDragHandlers(item);
@@ -1749,6 +2453,7 @@ let qaDragStartX = 0, qaDragStartY = 0;
 function attachQaDragHandlers(item){
   item.addEventListener('pointerdown', (e)=>{
     if(e.target.closest('.qa-list-actions')) return;
+    if(qaSelectMode) return; // 選択モード中はドラッグ並べ替えを無効にする
     qaDragStartX = e.clientX;
     qaDragStartY = e.clientY;
     const idx = Number(item.dataset.masterIdx);
@@ -1788,7 +2493,14 @@ function endQaDrag(){
   clearTimeout(qaDragTimer);
   if(qaDragGhost){ qaDragGhost.remove(); qaDragGhost = null; }
   if(qaDragFromIdx !== null){
-    afterQaMutation();
+    // 保存済みセットの並べ替えは、ここでは自動保存せず「並び替えを保存」ボタンを
+    // 押すまで保留にする。押さないままリロードすると元の順番に戻る
+    if(qaPractice.deckRecord){
+      qaOrderDirty = true;
+      updateQaSaveOrderBtn();
+    }else{
+      afterQaMutation();
+    }
   }
   qaDragFromIdx = null;
 }
@@ -1955,7 +2667,8 @@ shootBtn.addEventListener('click', ()=>{
     // 前に撮った写真の設定は変わらずそのまま残る
     mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
     id: makeShotId(),       // 並べ替え・削除・暗記済み管理のためのID
-    memorized: false        // 暗記済みかどうか
+    memorized: false,       // 暗記済みかどうか
+    hint: ''                // ヒント(あとから編集可能)
   });
   renderThumbs();
   showCaptureSignal();
@@ -2002,6 +2715,8 @@ let dragStartX = 0, dragStartY = 0;
 function attachThumbDragHandlers(box){
   box.addEventListener('pointerdown', (e)=>{
     if(e.target.closest('.del')) return; // ×ボタンの上では発動させない
+    if(e.target.closest('.hint-btn')) return; // ヒントボタンの上でも発動させない
+    if(selectMode) return; // 選択モード中はドラッグ並べ替えを無効にする
     dragStartX = e.clientX;
     dragStartY = e.clientY;
     const idx = Number(box.dataset.idx);
@@ -2065,6 +2780,57 @@ document.addEventListener('pointermove', (e)=>{
 document.addEventListener('pointerup', endThumbDrag);
 document.addEventListener('pointercancel', endThumbDrag);
 
+/* ---------- カード選択モード(今の写真を、まとめて削除／別セットへ移動) ---------- */
+let selectMode = false;
+let selectedShotIds = new Set();
+
+selectModeBtn.addEventListener('click', ()=>{
+  selectMode = !selectMode;
+  selectModeBtn.classList.toggle('active', selectMode);
+  bulkBar.classList.toggle('active', selectMode);
+  selectedShotIds = new Set();
+  renderThumbs();
+});
+
+bulkDeleteBtn.addEventListener('click', ()=>{
+  if(selectedShotIds.size === 0) return;
+  if(!confirm('選んだ' + selectedShotIds.size + '枚のカードを削除します。よろしいですか？')) return;
+  shots = shots.filter(s => !selectedShotIds.has(s.id));
+  selectedShotIds = new Set();
+  renderThumbs();
+  setStatus('選んだカードを削除しました');
+});
+
+bulkMoveBtn.addEventListener('click', async ()=>{
+  if(selectedShotIds.size === 0) return;
+  const options = await deckPickOptions(null);
+  options.push({ label:'＋新しいセットとして保存', value:'__new__' });
+  const target = await pickFromList('移動先のセットを選んでください', options);
+  if(target === null) return;
+
+  const moving = shots.filter(s => selectedShotIds.has(s.id));
+
+  if(target === '__new__'){
+    const name = prompt('新しいセットの名前を入力してください', '');
+    if(!name) return;
+    const folder = await pickFromList('保存先のフォルダを選んでください', await folderPickOptions());
+    if(folder === null) return;
+    await saveDeckToStorage({ name: name, folder: folder, shots: moving });
+  }else{
+    const list = await loadDecks();
+    const targetDeck = list.find(d => d.name === target);
+    if(!targetDeck) return;
+    targetDeck.shots = targetDeck.shots.concat(moving);
+    await saveDeckToStorage(targetDeck);
+  }
+
+  shots = shots.filter(s => !selectedShotIds.has(s.id));
+  selectedShotIds = new Set();
+  await refreshBrowseView();
+  renderThumbs();
+  setStatus('選んだカードを移動しました');
+});
+
 /* ---------- サムネイル表示 ---------- */
 function renderThumbs(){
   thumbsEl.innerHTML = '';
@@ -2072,12 +2838,35 @@ function renderThumbs(){
 
   shots.forEach((shot, idx)=>{
     const box = document.createElement('div');
-    box.className = 'thumb';
+    box.className = 'thumb' + (selectMode ? ' select-mode' : '') + (selectedShotIds.has(shot.id) ? ' selected' : '');
     box.dataset.idx = idx;
 
     const img = document.createElement('img');
     img.src = shot.dataUrl;
     box.appendChild(img);
+
+    const check = document.createElement('div');
+    check.className = 'select-check';
+    box.appendChild(check);
+
+    const hintBtn = document.createElement('button');
+    hintBtn.className = 'hint-btn';
+    hintBtn.textContent = shot.hint ? 'H済' : 'H';
+    hintBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+      if(val === null) return;
+      shot.hint = val.trim();
+      renderThumbs();
+    });
+    box.appendChild(hintBtn);
+
+    box.addEventListener('click', ()=>{
+      if(!selectMode) return;
+      if(selectedShotIds.has(shot.id)) selectedShotIds.delete(shot.id);
+      else selectedShotIds.add(shot.id);
+      renderThumbs();
+    });
 
     const del = document.createElement('button');
     del.className = 'del';
