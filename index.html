@@ -393,7 +393,7 @@
     background:var(--bg);
     z-index:50;
     padding:16px;
-    padding-bottom:40px;
+    padding-bottom:12px;
     overflow-y:auto;
   }
   #qaCardWrap{
@@ -440,6 +440,11 @@
     color:#08251c;
     font-weight:600;
   }
+  .qa-card-actions button.mem-lvl-1{
+    background:#d9a441;
+    color:#241a04;
+    font-weight:600;
+  }
   .qa-card-actions .qa-del-single{
     background:rgba(226,104,95,0.85);
   }
@@ -471,9 +476,25 @@
     border-radius: var(--radius);
     overflow:hidden;
   }
-  .qa-list-item.memorized{
+  .qa-list-item.mem-lvl-2{
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+  }
+  .qa-list-item.mem-lvl-1{
+    outline: 2px solid #d9a441;
+    outline-offset: -2px;
+  }
+  .qa-num-badge{
+    position:absolute;
+    right:6px; top:6px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 7px;
+    border-radius:10px;
+    z-index:6;
+    pointer-events:none;
   }
   .qa-list-imgwrap{
     position:relative;
@@ -504,7 +525,8 @@
     z-index:3;
     display:none;
   }
-  .qa-list-item.memorized .qa-list-badge{ display:block; }
+  .qa-list-item.mem-lvl-2 .qa-list-badge{ display:block; background:var(--accent); color:#08251c; }
+  .qa-list-item.mem-lvl-1 .qa-list-badge{ display:block; background:#d9a441; color:#241a04; }
   .qa-list-actions{
     display:flex;
     gap:6px;
@@ -520,6 +542,11 @@
   .qa-list-actions button.active{
     background: var(--accent);
     color:#08251c;
+    font-weight:600;
+  }
+  .qa-list-actions button.mem-lvl-1{
+    background:#d9a441;
+    color:#241a04;
     font-weight:600;
   }
   .qa-list-actions .qa-list-del{
@@ -808,6 +835,9 @@
     <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
   </div>
   <div id="bulkBar" class="bulk-bar">
+    <button id="bulkSelectAllBtn" class="btn-secondary">全部選択</button>
+    <button id="bulkSelectNoneBtn" class="btn-secondary">選択解除</button>
+    <button id="bulkRotateBtn" class="btn-secondary">選んだカードを90度回転</button>
     <button id="bulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
     <button id="bulkMoveBtn" class="btn-secondary">選んだカードをセットへ移動</button>
   </div>
@@ -903,7 +933,7 @@
      代わりに全データを1つのファイルに書き出して、それを別の端末で
      読み込むことでセットを引き継げるようにしている -->
 <div class="panel">
-  <div class="sub" style="margin-bottom:8px;">別の端末とデータを共有したいときは、ここからファイルに書き出して、別の端末でそのファイルを読み込んでください。</div>
+  <div class="sub" style="margin-bottom:8px;">別の端末とデータを共有したいときは、ここからファイルに書き出して、別の端末でそのファイルを読み込んでください。読み込みは上書きではなく追加なので、前からあったカードが消えることはありません。フォルダ単位・セット単位で書き出したいときは、それぞれの一覧にある「書き出す」ボタンを使ってください。</div>
   <div class="row">
     <button id="exportDataBtn" class="btn-secondary" style="flex:1">全データを書き出す（ファイル保存）</button>
   </div>
@@ -924,20 +954,15 @@
     ／暗記済み <b id="qaMemNum" style="color:var(--text);">0</b> / <span id="qaAllNum">0</span>
   </div>
 
-  <div class="row" id="qaStopwatch">
-    <span id="qaStopwatchTime">00:00.0</span>
-    <button id="qaStopwatchToggleBtn" class="btn-secondary">開始</button>
-    <button id="qaStopwatchResetBtn" class="btn-secondary">リセット</button>
-  </div>
-
   <div class="qa-sub-row">
     <button id="qaModeOneBtn" class="btn-toggle active">1枚ずつ表示</button>
     <button id="qaModeListBtn" class="btn-toggle">一覧表示（長押しで並べ替え）</button>
   </div>
   <div class="qa-sub-row">
     <button id="qaFilterAllBtn" class="btn-toggle active" data-filter="all">全部表示</button>
-    <button id="qaFilterUnBtn" class="btn-toggle" data-filter="unmemorized">未暗記のみ</button>
-    <button id="qaFilterMemBtn" class="btn-toggle" data-filter="memorized">暗記済みのみ</button>
+    <button id="qaFilterUnBtn" class="btn-toggle" data-filter="0">未暗記のみ</button>
+    <button id="qaFilterMidBtn" class="btn-toggle" data-filter="1">うろ覚えのみ</button>
+    <button id="qaFilterMemBtn" class="btn-toggle" data-filter="2">暗記済みのみ</button>
   </div>
 
   <div id="qaOneWrap">
@@ -947,6 +972,7 @@
       <div id="qaMaskBottom" class="qa-mask"></div>
       <div id="qaMaskLeft" class="qa-mask"></div>
       <div id="qaMaskRight" class="qa-mask"></div>
+      <div id="qaCardNumBadge" class="qa-num-badge"></div>
       <div class="qa-card-actions">
         <button id="qaHintBtn">ヒント編集</button>
         <button id="qaMemBtn">暗記済みにする</button>
@@ -965,11 +991,19 @@
   <div id="qaEmptyFilter" class="qa-empty-filter">このフィルターに当てはまるカードがありません</div>
 
   <div id="qaStickyBar">
+    <div class="row" id="qaStopwatch">
+      <span id="qaStopwatchTime">00:00.0</span>
+      <button id="qaStopwatchToggleBtn" class="btn-secondary">開始</button>
+      <button id="qaStopwatchResetBtn" class="btn-secondary">リセット</button>
+    </div>
     <div class="qa-sub-row">
       <button id="qaSelectModeBtn" class="btn-toggle">カードを選択する</button>
       <button id="qaShuffleBtn" class="btn-toggle">シャッフル</button>
     </div>
     <div id="qaBulkBar" class="bulk-bar">
+      <button id="qaBulkSelectAllBtn" class="btn-secondary">全部選択</button>
+      <button id="qaBulkSelectNoneBtn" class="btn-secondary">選択解除</button>
+      <button id="qaBulkRotateBtn" class="btn-secondary">選んだカードを90度回転</button>
       <button id="qaBulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
       <button id="qaBulkMoveBtn" class="btn-secondary">選んだカードを別セットへ移動</button>
     </div>
@@ -1080,6 +1114,9 @@ const zoomValEl   = document.getElementById('zoomVal');
 const shuffleBtn  = document.getElementById('shuffleBtn');
 const selectModeBtn = document.getElementById('selectModeBtn');
 const bulkBar        = document.getElementById('bulkBar');
+const bulkSelectAllBtn  = document.getElementById('bulkSelectAllBtn');
+const bulkSelectNoneBtn = document.getElementById('bulkSelectNoneBtn');
+const bulkRotateBtn  = document.getElementById('bulkRotateBtn');
 const bulkDeleteBtn  = document.getElementById('bulkDeleteBtn');
 const bulkMoveBtn    = document.getElementById('bulkMoveBtn');
 const orientRow   = document.getElementById('orientRow');
@@ -1159,12 +1196,17 @@ const qaModeOneBtn  = document.getElementById('qaModeOneBtn');
 const qaModeListBtn = document.getElementById('qaModeListBtn');
 const qaFilterAllBtn = document.getElementById('qaFilterAllBtn');
 const qaFilterUnBtn  = document.getElementById('qaFilterUnBtn');
+const qaFilterMidBtn = document.getElementById('qaFilterMidBtn');
 const qaFilterMemBtn = document.getElementById('qaFilterMemBtn');
 const qaShuffleBtn   = document.getElementById('qaShuffleBtn');
 const qaSelectModeBtn = document.getElementById('qaSelectModeBtn');
 const qaBulkBar       = document.getElementById('qaBulkBar');
+const qaBulkSelectAllBtn  = document.getElementById('qaBulkSelectAllBtn');
+const qaBulkSelectNoneBtn = document.getElementById('qaBulkSelectNoneBtn');
+const qaBulkRotateBtn = document.getElementById('qaBulkRotateBtn');
 const qaBulkDeleteBtn = document.getElementById('qaBulkDeleteBtn');
 const qaBulkMoveBtn   = document.getElementById('qaBulkMoveBtn');
+const qaCardNumBadge  = document.getElementById('qaCardNumBadge');
 const qaSaveOrderBtn  = document.getElementById('qaSaveOrderBtn');
 const qaList         = document.getElementById('qaList');
 const qaEmptyFilter  = document.getElementById('qaEmptyFilter');
@@ -1186,7 +1228,7 @@ let maskTop = 0, maskBottom = 0, maskLeft = 0, maskRight = 50;
 let qaPractice = { name: '', shots: [], mask: { top:0, bottom:0, left:0, right:50 }, deckRecord: null };
 let qaRevealed = false;   // 今のカードが「隠した部分を表示中」かどうか
 let qaMode = 'one';       // 'one'=1枚ずつ表示 / 'list'=一覧表示
-let qaFilter = 'all';     // 'all' / 'memorized' / 'unmemorized'
+let qaFilter = 'all';     // 'all' / '0'(未暗記) / '1'(うろ覚え) / '2'(暗記済み)
 let qaCursor = 0;         // 1枚ずつ表示のとき、フィルター後の並びの中で何枚目を見ているか
 let qaListRevealed = new Set(); // 一覧表示で、今どのカードの答えを開いているか(カードのidを保持)
 let qaOrderDirty = false;  // 並べ替えをまだ保存していない状態かどうか
@@ -1236,6 +1278,66 @@ qaStopwatchResetBtn.addEventListener('click', resetStopwatch);
 // 撮影した写真1枚(shot)にユニークなIDを振るための小さな関数
 function makeShotId(){
   return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ---------- 暗記度(3段階)：0=未暗記／1=うろ覚え／2=暗記済み ----------
+   古いデータ(memorizedという○/×だけの形式)が来た場合も、
+   ここで自動的に0か2に変換して補ってあげる */
+const MEM_LEVEL_LABELS = ['未暗記', 'うろ覚え', '暗記済み'];
+function normalizeMemLevel(s){
+  if(typeof s.memLevel !== 'number' || s.memLevel < 0 || s.memLevel > 2){
+    s.memLevel = s.memorized ? 2 : 0;
+  }
+  return s;
+}
+
+/* ---------- カードの画像を90度(時計回り)回転する ----------
+   canvasに描き直して、幅と高さを入れ替えたうえで保存し直す */
+function rotateShotImage(shot){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width/2, canvas.height/2);
+      ctx.rotate(Math.PI/2);
+      ctx.drawImage(img, -img.width/2, -img.height/2);
+      shot.dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      shot.width = canvas.width;
+      shot.height = canvas.height;
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = shot.dataUrl;
+  });
+}
+async function rotateShots(list){
+  for(const shot of list){
+    await rotateShotImage(shot);
+  }
+}
+
+/* ---------- 書き出し用のファイルを1個作ってダウンロードする共通処理 ---------- */
+function makeExportPayload(folders, decks){
+  return {
+    appName: '単語帳スキャナー',
+    exportedAt: new Date().toISOString(),
+    folders: folders,
+    decks: decks
+  };
+}
+function downloadJSON(payload, filename){
+  const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 3000);
 }
 
 // 撮影枚数の上限は撤廃しました（以前は20枚→40枚でしたが、今は無制限です）。
@@ -1626,11 +1728,10 @@ async function migrateOldDecksIfNeeded(){
       await saveDeckToStorage({
         name: d.name,
         folder: d.folder || '',
-        shots: (d.shots || []).map(s => ({
+        shots: (d.shots || []).map(s => normalizeMemLevel({
           ...s,
           mask: s.mask || d.mask,
-          id: s.id || makeShotId(),
-          memorized: typeof s.memorized === 'boolean' ? s.memorized : false
+          id: s.id || makeShotId()
         }))
       });
     }
@@ -1733,9 +1834,23 @@ async function renderFolderList(){
     });
     row.appendChild(main);
 
+    const actions = document.createElement('div');
+    actions.className = 'browse-actions';
+
+    // このフォルダ(棚)だけを書き出す。データ移動でフォルダごと渡したいときに使う
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn-secondary';
+    exportBtn.textContent = '書き出す';
+    exportBtn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const inFolder = decks.filter(d => (d.folder || '') === folderValue);
+      const folderObj = folders.find(f => f.name === folderValue);
+      downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], inFolder), (folderValue || 'フォルダなし') + '.json');
+      setStatus('フォルダ「' + (folderValue || '（フォルダなし）') + '」を書き出しました');
+    });
+    actions.appendChild(exportBtn);
+
     if(deletable){
-      const actions = document.createElement('div');
-      actions.className = 'browse-actions';
       const delBtn = document.createElement('button');
       delBtn.className = 'btn-danger';
       delBtn.textContent = '削除';
@@ -1755,8 +1870,8 @@ async function renderFolderList(){
         setStatus('フォルダ「' + folderValue + '」を削除しました');
       });
       actions.appendChild(delBtn);
-      row.appendChild(actions);
     }
+    row.appendChild(actions);
 
     folderListItems.appendChild(row);
   };
@@ -1889,6 +2004,18 @@ async function renderDeckList(){
         setStatus('セット「' + d.name + '」を移動しました');
       });
 
+      // このセット(ファイル)1個だけを書き出す。データ移動でファイル単位で渡したいときに使う
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'btn-secondary';
+      exportBtn.textContent = '書き出す';
+      exportBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const allFolders = await loadFolders();
+        const folderObj = d.folder ? allFolders.find(f => f.name === d.folder) : null;
+        downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], [d]), d.name + '.json');
+        setStatus('セット「' + d.name + '」を書き出しました');
+      });
+
       const delBtn = document.createElement('button');
       delBtn.className = 'btn-danger';
       delBtn.textContent = '削除';
@@ -1902,6 +2029,7 @@ async function renderDeckList(){
 
       actions.appendChild(practiceBtn);
       actions.appendChild(moveBtn);
+      actions.appendChild(exportBtn);
       actions.appendChild(delBtn);
       row.appendChild(actions);
     }
@@ -1923,7 +2051,7 @@ saveDeckBtn.addEventListener('click', async ()=>{
     shots: shots.map(s => ({
       dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask,
       id: s.id || makeShotId(),
-      memorized: !!s.memorized,
+      memLevel: typeof s.memLevel === 'number' ? s.memLevel : (s.memorized ? 2 : 0),
       hint: s.hint || ''
     }))
   };
@@ -1942,26 +2070,15 @@ saveDeckBtn.addEventListener('click', async ()=>{
   }
 });
 
-/* ---------- 全データの書き出し／読み込み(端末間の引き継ぎ用) ---------- */
+/* ---------- 全データの書き出し／読み込み(端末間の引き継ぎ用) ----------
+   読み込みは「上書き」ではなく「追加」。同じ名前のセットが既にある場合は、
+   もとのカードは残したまま、そこに含まれていない新しいカードだけを
+   追加する(idが同じカードは重複させない)。 */
 exportDataBtn.addEventListener('click', async ()=>{
   try{
     const folders = await loadFolders();
     const decks = await loadDecks();
-    const payload = {
-      appName: '単語帳スキャナー',
-      exportedAt: new Date().toISOString(),
-      folders: folders,
-      decks: decks
-    };
-    const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '単語帳データ.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=> URL.revokeObjectURL(url), 3000);
+    downloadJSON(makeExportPayload(folders, decks), '単語帳データ（全部）.json');
     setStatus('データを書き出しました。このファイルを別の端末で読み込んでください');
   }catch(e){
     console.error(e);
@@ -1970,6 +2087,51 @@ exportDataBtn.addEventListener('click', async ()=>{
 });
 
 importDataBtn.addEventListener('click', ()=> importDataInput.click());
+
+// フォルダ・セットのデータを、既存データを消さずに「追加」でマージする
+async function importPayloadMerge(payload){
+  const existingFolders = await loadFolders();
+  const existingDecks = await loadDecks();
+  const folders = payload.folders || [];
+  const decks = payload.decks || [];
+
+  let newFolders = 0, newDecks = 0, updatedDecks = 0, newCards = 0;
+
+  for(const f of folders){
+    if(!existingFolders.some(ef => ef.name === f.name)){
+      await saveFolderToStorage(f);
+      existingFolders.push(f);
+      newFolders++;
+    }
+  }
+
+  for(const d of decks){
+    // 読み込むデータにID・ヒントが無い場合(古い書き出し)にも対応
+    d.shots = (d.shots || []).map(s => normalizeMemLevel({
+      ...s,
+      id: s.id || makeShotId(),
+      hint: s.hint || ''
+    }));
+    const existing = existingDecks.find(ed => ed.name === d.name);
+    if(!existing){
+      await saveDeckToStorage(d);
+      existingDecks.push(d);
+      newDecks++;
+      newCards += d.shots.length;
+    }else{
+      // 同じ名前のセットが既にある場合：前からあったカードは残したまま、
+      // まだ無いカード(idが一致しないもの)だけを追加する
+      const existingIds = new Set(existing.shots.map(s => s.id));
+      const toAdd = d.shots.filter(s => !existingIds.has(s.id));
+      existing.shots = existing.shots.concat(toAdd);
+      await saveDeckToStorage(existing);
+      updatedDecks++;
+      newCards += toAdd.length;
+    }
+  }
+
+  return { newFolders, newDecks, updatedDecks, newCards };
+}
 
 importDataInput.addEventListener('change', async ()=>{
   const file = importDataInput.files[0];
@@ -1980,23 +2142,11 @@ importDataInput.addEventListener('change', async ()=>{
     const payload = JSON.parse(text);
     const folders = payload.folders || [];
     const decks = payload.decks || [];
-    if(!confirm('フォルダ' + folders.length + '個・セット' + decks.length + '個を読み込みます。同じ名前のものは上書きされます。よろしいですか？')) return;
-    for(const f of folders){
-      await saveFolderToStorage(f);
-    }
-    for(const d of decks){
-      // 読み込むデータにID・ヒントが無い場合(古い書き出し)にも対応
-      d.shots = (d.shots || []).map(s => ({
-        ...s,
-        id: s.id || makeShotId(),
-        memorized: typeof s.memorized === 'boolean' ? s.memorized : false,
-        hint: s.hint || ''
-      }));
-      await saveDeckToStorage(d);
-    }
+    if(!confirm('フォルダ' + folders.length + '個・セット' + decks.length + '個ぶんのデータを読み込みます。同じ名前のセットが既にある場合、前のカードは消さずに、新しいカードだけ追加されます。よろしいですか？')) return;
+    const result = await importPayloadMerge(payload);
     await refreshFolderSelect();
     await refreshBrowseView();
-    setStatus('データを読み込みました（フォルダ' + folders.length + '個・セット' + decks.length + '個）');
+    setStatus('データを読み込みました（新規セット' + result.newDecks + '個・追加更新' + result.updatedDecks + '個・追加カード' + result.newCards + '枚）');
   }catch(e){
     console.error(e);
     setStatus('読み込みに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
@@ -2018,10 +2168,10 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
   const list = practiceShots || shots;
   if(list.length === 0) return;
 
-  // 古い形式のデータ(ID・暗記済みフラグ・ヒントが無いもの)にも対応
+  // 古い形式のデータ(ID・暗記度・ヒントが無いもの)にも対応
   list.forEach(s=>{
     if(!s.id) s.id = makeShotId();
-    if(typeof s.memorized !== 'boolean') s.memorized = false;
+    normalizeMemLevel(s);
     if(typeof s.hint !== 'string') s.hint = '';
   });
 
@@ -2091,9 +2241,8 @@ function getQaFilteredIndices(){
     .map((s, i)=> i)
     .filter(i=>{
       const s = qaPractice.shots[i];
-      if(qaFilter === 'memorized') return !!s.memorized;
-      if(qaFilter === 'unmemorized') return !s.memorized;
-      return true;
+      if(qaFilter === 'all') return true;
+      return s.memLevel === Number(qaFilter);
     });
 }
 
@@ -2103,13 +2252,14 @@ function setQaModeButtons(){
 }
 function setQaFilterButtons(){
   qaFilterAllBtn.classList.toggle('active', qaFilter === 'all');
-  qaFilterUnBtn.classList.toggle('active', qaFilter === 'unmemorized');
-  qaFilterMemBtn.classList.toggle('active', qaFilter === 'memorized');
+  qaFilterUnBtn.classList.toggle('active', qaFilter === '0');
+  qaFilterMidBtn.classList.toggle('active', qaFilter === '1');
+  qaFilterMemBtn.classList.toggle('active', qaFilter === '2');
 }
 
 function updateQaCounts(){
   qaAllNum.textContent = qaPractice.shots.length;
-  qaMemNum.textContent = qaPractice.shots.filter(s => s.memorized).length;
+  qaMemNum.textContent = qaPractice.shots.filter(s => s.memLevel === 2).length;
 }
 
 /* ---------- 練習画面全体の描画（1枚ずつ／一覧、共通の入り口） ---------- */
@@ -2148,8 +2298,11 @@ function renderQaCard(filtered){
   qaTotalNum.textContent = filtered.length;
   qaRevealed = false;
   applyQaMaskVisibility(shot);
-  qaMemBtn.textContent = shot.memorized ? '未暗記に戻す' : '暗記済みにする';
-  qaMemBtn.classList.toggle('active', !!shot.memorized);
+  qaCardNumBadge.textContent = '#' + (masterIdx + 1);
+  qaMemBtn.textContent = '暗記度：' + MEM_LEVEL_LABELS[shot.memLevel] + '（タップで切替）';
+  qaMemBtn.classList.remove('active', 'mem-lvl-1');
+  if(shot.memLevel === 2) qaMemBtn.classList.add('active');
+  else if(shot.memLevel === 1) qaMemBtn.classList.add('mem-lvl-1');
 }
 
 // 隠す範囲(qaMaskTop等)の大きさを切り替える。
@@ -2191,7 +2344,7 @@ qaHintBtn.addEventListener('click', ()=>{
 qaMemBtn.addEventListener('click', ()=>{
   const masterIdx = Number(qaCardWrap.dataset.masterIdx);
   const shot = qaPractice.shots[masterIdx];
-  shot.memorized = !shot.memorized;
+  shot.memLevel = (shot.memLevel + 1) % 3;
   afterQaMutation();
   renderQaAll();
 });
@@ -2243,6 +2396,30 @@ qaSelectModeBtn.addEventListener('click', ()=>{
     setQaModeButtons();
   }
   renderQaAll();
+});
+
+qaBulkSelectAllBtn.addEventListener('click', ()=>{
+  const filtered = getQaFilteredIndices();
+  qaSelectedIds = new Set(filtered.map(i => qaPractice.shots[i].id));
+  renderQaAll();
+});
+qaBulkSelectNoneBtn.addEventListener('click', ()=>{
+  qaSelectedIds = new Set();
+  renderQaAll();
+});
+qaBulkRotateBtn.addEventListener('click', async ()=>{
+  if(qaSelectedIds.size === 0) return;
+  const targets = qaPractice.shots.filter(s => qaSelectedIds.has(s.id));
+  qaBulkRotateBtn.disabled = true;
+  setStatus('回転しています…');
+  try{
+    await rotateShots(targets);
+    afterQaMutation();
+    renderQaAll();
+    setStatus('選んだカードを90度回転しました');
+  }finally{
+    qaBulkRotateBtn.disabled = false;
+  }
 });
 
 qaBulkDeleteBtn.addEventListener('click', ()=>{
@@ -2307,7 +2484,7 @@ qaModeListBtn.addEventListener('click', ()=>{
 });
 
 /* ---------- フィルター切り替え(全部／未暗記／暗記済み) ---------- */
-[qaFilterAllBtn, qaFilterUnBtn, qaFilterMemBtn].forEach(btn=>{
+[qaFilterAllBtn, qaFilterUnBtn, qaFilterMidBtn, qaFilterMemBtn].forEach(btn=>{
   btn.addEventListener('click', ()=>{
     qaFilter = btn.dataset.filter;
     setQaFilterButtons();
@@ -2337,11 +2514,11 @@ qaShuffleBtn.addEventListener('click', ()=>{
 function renderQaList(filtered){
   qaList.innerHTML = '';
 
-  filtered.forEach((masterIdx)=>{
+  filtered.forEach((masterIdx, i)=>{
     const shot = qaPractice.shots[masterIdx];
 
     const item = document.createElement('div');
-    item.className = 'qa-list-item' + (shot.memorized ? ' memorized' : '') + (qaSelectMode ? ' select-mode' : '') + (qaSelectedIds.has(shot.id) ? ' selected' : '');
+    item.className = 'qa-list-item mem-lvl-' + shot.memLevel + (qaSelectMode ? ' select-mode' : '') + (qaSelectedIds.has(shot.id) ? ' selected' : '');
     item.dataset.masterIdx = masterIdx;
 
     const imgWrap = document.createElement('div');
@@ -2356,8 +2533,13 @@ function renderQaList(filtered){
 
     const badge = document.createElement('div');
     badge.className = 'qa-list-badge';
-    badge.textContent = '暗記済み';
+    badge.textContent = MEM_LEVEL_LABELS[shot.memLevel];
     imgWrap.appendChild(badge);
+
+    const numBadge = document.createElement('div');
+    numBadge.className = 'qa-num-badge';
+    numBadge.textContent = '#' + (i + 1);
+    imgWrap.appendChild(numBadge);
 
     const m = shot.mask || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
     const revealed = qaListRevealed.has(shot.id);
@@ -2406,10 +2588,11 @@ function renderQaList(filtered){
     });
 
     const memBtn = document.createElement('button');
-    memBtn.textContent = shot.memorized ? '未暗記に戻す' : '暗記済みにする';
-    if(shot.memorized) memBtn.classList.add('active');
+    memBtn.textContent = '暗記度：' + MEM_LEVEL_LABELS[shot.memLevel];
+    if(shot.memLevel === 2) memBtn.classList.add('active');
+    else if(shot.memLevel === 1) memBtn.classList.add('mem-lvl-1');
     memBtn.addEventListener('click', ()=>{
-      shot.memorized = !shot.memorized;
+      shot.memLevel = (shot.memLevel + 1) % 3;
       afterQaMutation();
       renderQaAll();
     });
@@ -2667,7 +2850,7 @@ shootBtn.addEventListener('click', ()=>{
     // 前に撮った写真の設定は変わらずそのまま残る
     mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
     id: makeShotId(),       // 並べ替え・削除・暗記済み管理のためのID
-    memorized: false,       // 暗記済みかどうか
+    memLevel: 0,            // 暗記度(0=未暗記/1=うろ覚え/2=暗記済み)
     hint: ''                // ヒント(あとから編集可能)
   });
   renderThumbs();
@@ -2790,6 +2973,28 @@ selectModeBtn.addEventListener('click', ()=>{
   bulkBar.classList.toggle('active', selectMode);
   selectedShotIds = new Set();
   renderThumbs();
+});
+
+bulkSelectAllBtn.addEventListener('click', ()=>{
+  selectedShotIds = new Set(shots.map(s => s.id));
+  renderThumbs();
+});
+bulkSelectNoneBtn.addEventListener('click', ()=>{
+  selectedShotIds = new Set();
+  renderThumbs();
+});
+bulkRotateBtn.addEventListener('click', async ()=>{
+  if(selectedShotIds.size === 0) return;
+  const targets = shots.filter(s => selectedShotIds.has(s.id));
+  bulkRotateBtn.disabled = true;
+  setStatus('回転しています…');
+  try{
+    await rotateShots(targets);
+    renderThumbs();
+    setStatus('選んだカードを90度回転しました');
+  }finally{
+    bulkRotateBtn.disabled = false;
+  }
 });
 
 bulkDeleteBtn.addEventListener('click', ()=>{
