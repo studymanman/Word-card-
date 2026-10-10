@@ -3096,7 +3096,3260 @@ function renderThumbs(){
   saveDeckBtn.disabled = shots.length === 0;
   // 練習画面が「今の写真」を見ている最中(＝保存済みセットではない)場合だけ、
   // 撮影し直して枚数が変わったことを画面にも反映する
+  <!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>単語帳スキャナー</title>
+<style>
+  /* ===== 全体の色・余白などをまとめて管理する場所 =====
+     色を変えたいときはここの値だけ書き換えればOKです */
+  :root{
+    --bg: #12151c;
+    --panel: #1c212c;
+    --accent: #5ec8a8;
+    --accent-dark: #3fa285;
+    --text: #eef1f5;
+    --text-dim: #9aa4b2;
+    --danger: #e2685f;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    padding: 16px;
+    padding-bottom: 60px;
+  }
+
+  h1{
+    font-size: 20px;
+    margin: 4px 0 2px;
+    letter-spacing: 0.02em;
+  }
+  .sub{
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .panel{
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+
+  /* ---- カメラまわり ---- */
+  #cameraWrap{
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  #video{
+    width:100%;
+    height:100%;
+    object-fit: cover;
+    display:block;
+  }
+
+  /* 撮影枠。box-shadowで枠の外側だけ暗くするテクニック */
+  #frame{
+    position:absolute;
+    left:50%; top:50%;
+    transform: translate(-50%,-50%);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+    border-radius: 6px;
+    pointer-events:none;
+    transition: width .15s, height .15s;
+  }
+  /* 枠のサイズ4種類。
+     大/中/小は「厚み(高さ)」を22%で固定し、横幅だけを変えている
+     （サイズ違いで縦にも伸び縮みすると"縦長になった"ように見えてしまうため）。
+     極細だけは厚みそのものを薄くした特別な枠。
+     数字(%)を変えると枠の大きさを調整できます */
+  #frame.size-large { width:96%; height:22%; }
+  #frame.size-medium{ width:75%; height:22%; }
+  #frame.size-small { width:50%; height:22%; }
+  #frame.size-thin  { width:90%; height:10%; } /* 極細：横幅は広いまま厚みだけ薄くする */
+
+  /* 縦向きモード：横向きの width/height をそのまま入れ替えている。
+     つまり縦向きでも「厚み(横幅)」は固定で、長さ(高さ)だけが変わる */
+  #frame.vertical.size-large { width:22%; height:96%; }
+  #frame.vertical.size-medium{ width:22%; height:75%; }
+  #frame.vertical.size-small { width:22%; height:50%; }
+  #frame.vertical.size-thin  { width:10%; height:90%; }
+
+  #cameraHint{
+    position:absolute;
+    bottom:10px; left:0; right:0;
+    text-align:center;
+    color:#fff;
+    font-size:12px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    pointer-events:none;
+  }
+
+  .row{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+    flex-wrap: wrap;
+  }
+
+  button{
+    font-family: inherit;
+    border:none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-toggle{
+    flex:1;
+    background:#2a3140;
+    color: var(--text-dim);
+  }
+  .btn-toggle.active{
+    background: var(--accent);
+    color:#08251c;
+    font-weight:600;
+  }
+
+  .btn-main{
+    width:100%;
+    padding:14px;
+    font-size:16px;
+    font-weight:700;
+    background: var(--accent);
+    color:#08251c;
+  }
+  .btn-main:disabled{
+    background:#3a4150;
+    color:#6c7684;
+  }
+
+  .btn-secondary{
+    background:#2a3140;
+    color:var(--text);
+    flex:1;
+  }
+
+  .btn-danger{
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+  }
+
+  /* ---- サムネイル一覧 ---- */
+  #countLabel{
+    font-size:14px;
+    color: var(--text-dim);
+    margin-bottom:8px;
+  }
+  #countLabel b{ color: var(--text); }
+
+  #thumbs{
+    display:grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap:8px;
+  }
+  .thumb{
+    position:relative;
+    background:#000;
+    border-radius:8px;
+    overflow:hidden;
+  }
+  .thumb img{
+    width:100%;
+    display:block;
+  }
+  .thumb .del{
+    position:absolute;
+    top:4px; right:4px;
+    width:22px; height:22px;
+    line-height:22px;
+    text-align:center;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    border-radius:50%;
+    font-size:13px;
+    padding:0;
+  }
+  .empty-note{
+    color: var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    padding: 20px 0;
+  }
+
+  /* ---- 撮影の合図(音の代わりに画面を一瞬光らせる) ---- */
+  #flash{
+    position:absolute;
+    inset:0;
+    background:#fff;
+    opacity:0;
+    pointer-events:none;
+    z-index:8;
+  }
+  #flash.active{
+    animation: flashPulse .28s ease-out;
+  }
+  @keyframes flashPulse{
+    0%   { opacity:0.85; }
+    100% { opacity:0; }
+  }
+
+  /* 撮影した瞬間、枠の色も一瞬変えて視覚的にわかりやすくする */
+  #frame.captured{
+    border-color:#fff;
+  }
+  #zoomControl{
+    position:absolute;
+    top:6%;
+    bottom:6%;
+    right:8px;
+    width:44px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    z-index:5;
+  }
+  #zoomVal{
+    color:#fff;
+    font-size:11px;
+    background:rgba(0,0,0,0.55);
+    padding:2px 7px;
+    border-radius:8px;
+    margin-bottom:8px;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+  /* -webkit-appearance: slider-vertical はSafari/Edge(iOS)系で
+     ネイティブに縦スライダーとして描画される。ステップを細かくして
+     なめらかに動くようにしている */
+  #zoomSlider{
+    flex:1;
+    width:38px;
+    -webkit-appearance: slider-vertical;
+    appearance: slider-vertical;
+    background: rgba(255,255,255,0.18);
+    border-radius:19px;
+    outline:none;
+  }
+  #zoomSlider::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    background: var(--accent);
+    border:2px solid #fff;
+    box-shadow:0 1px 5px rgba(0,0,0,0.45);
+  }
+
+  select{
+    font-family:inherit;
+    background:#2a3140;
+    color:var(--text);
+    border:none;
+    border-radius:10px;
+    padding:10px;
+    font-size:14px;
+    flex:1;
+  }
+
+  #status{
+    font-size:13px;
+    color: var(--text-dim);
+    min-height: 18px;
+    margin-top: 6px;
+  }
+  #status.error{ color: var(--danger); }
+
+  /* ---- カスタム枠パネル ---- */
+  .custom-slider-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:8px;
+    width:100%;
+  }
+  .custom-slider-label{
+    width:44px;
+    font-size:13px;
+    color: var(--text-dim);
+    flex-shrink:0;
+  }
+  .custom-slider-row input[type="range"]{
+    flex:1;
+    accent-color: var(--accent);
+  }
+  .custom-slider-val{
+    width:44px;
+    text-align:right;
+    font-size:13px;
+    color: var(--text);
+    flex-shrink:0;
+  }
+
+  /* ---- サムネイルを長押し→ドラッグで並べ替えたときに、
+     指に追従して表示される「分身」のカード ---- */
+  .drag-ghost{
+    position:fixed;
+    top:0; left:0;
+    width:120px;
+    transform: translate(-50%,-50%) scale(1.05);
+    pointer-events:none;
+    z-index:200;
+    box-shadow:0 6px 18px rgba(0,0,0,0.5);
+    border-radius:8px;
+    opacity:0.95;
+  }
+
+  /* ---- (旧)サムネイルの並べ替え用コントロール(↑↓×)。
+     枚数が増えると削除ボタンに被ってしまうため、今は長押しドラッグに
+     置き換え済み。このCSS自体は使われていないが残しておいても無害 ---- */
+  .thumb .ctrl-bar{
+    position:absolute;
+    left:0; right:0; bottom:0;
+    display:flex;
+    gap:4px;
+    padding:4px;
+    background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.55));
+  }
+  .thumb .ctrl-bar button{
+    flex:1;
+    padding:4px 0;
+    font-size:13px;
+    background: rgba(0,0,0,0.55);
+    color:#fff;
+    border-radius:6px;
+  }
+  .thumb .ctrl-bar button:disabled{
+    opacity:0.35;
+  }
+
+  /* ---- 一問一答：カメラ枠の上に出す「膜」のプレビュー ----
+     #frameの内側に配置し、上下左右それぞれ独立に幅/高さを
+     JSから%で指定する。実際の撮影結果には影響しない、あくまで目安表示 */
+  .preview-mask{
+    position:absolute;
+    background: rgba(120,130,150,0.55);
+    pointer-events:none;
+    display:none; /* 一問一答モードOFFのときは非表示 */
+  }
+  #previewMaskTop   { top:0; left:0; right:0; }
+  #previewMaskBottom{ bottom:0; left:0; right:0; }
+  #previewMaskLeft  { top:0; bottom:0; left:0; }
+  #previewMaskRight { top:0; bottom:0; right:0; }
+
+  /* ---- マスクの境界線をタップ&ドラッグして伸び縮みさせるハンドル ----
+     見た目は小さな白いつまみ。指で掴みやすいよう、実際の見た目より
+     少し広めのタップ範囲(padding)を確保している。
+     touch-action:none で、ドラッグ中にページ全体がスクロールしてしまうのを防ぐ */
+  .mask-handle{
+    position:absolute;
+    background:#fff;
+    border-radius:6px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.5);
+    touch-action:none;
+    z-index:6;
+    /* 親の#frameがpointer-events:noneなので、ここで明示的に
+       操作を受け付けるように戻しておかないと、表示されても
+       指でつかめない(反応しない)状態になってしまう */
+    pointer-events:auto;
+  }
+  #maskHandleTop, #maskHandleBottom{
+    left:50%;
+    width:44px; height:16px;
+    transform:translate(-50%,-50%);
+  }
+  #maskHandleLeft, #maskHandleRight{
+    top:50%;
+    width:16px; height:44px;
+    transform:translate(-50%,-50%);
+  }
+
+  /* ---- 一問一答：練習画面(全画面表示) ----
+     通常のページの上に覆いかぶさる形で表示する、独立した「練習用の画面」。
+     閉じるまでは他のパネルは見えなくなる */
+  #qaViewer{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:var(--bg);
+    z-index:50;
+    padding:16px;
+    padding-bottom:12px;
+    overflow-y:auto;
+  }
+  #qaCardWrap{
+    position:relative;
+    width:100%;
+    background:#000;
+    border-radius: var(--radius);
+    overflow:hidden;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #qaCardImg{
+    width:100%;
+    display:block;
+  }
+  .qa-mask{
+    position:absolute;
+    background: var(--panel);
+    border: 1px dashed var(--text-dim);
+    box-sizing:border-box;
+    display:none;
+  }
+  #qaMaskTop   { top:0; left:0; right:0; }
+  #qaMaskBottom{ bottom:0; left:0; right:0; }
+  #qaMaskLeft  { top:0; bottom:0; left:0; }
+  #qaMaskRight { top:0; bottom:0; right:0; }
+
+  /* ---- 一問一答：カード右下の「暗記済み／削除」ボタン ---- */
+  .qa-card-actions{
+    position:absolute;
+    right:8px; bottom:8px;
+    display:flex;
+    gap:6px;
+    z-index:7;
+  }
+  .qa-card-actions button{
+    padding:8px 10px;
+    font-size:12px;
+    background:rgba(0,0,0,0.62);
+    color:#fff;
+  }
+  .qa-card-actions button.active{
+    background: var(--accent);
+    color:#08251c;
+    font-weight:600;
+  }
+  .qa-card-actions button.mem-lvl-1{
+    background:#d9a441;
+    color:#241a04;
+    font-weight:600;
+  }
+  .qa-card-actions .qa-del-single{
+    background:rgba(226,104,95,0.85);
+  }
+
+  /* ---- 一問一答：表示モード／フィルターの切り替え行 ---- */
+  .qa-sub-row{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .qa-sub-row button{
+    flex:1;
+    min-width:78px;
+    padding:8px 6px;
+    font-size:12.5px;
+  }
+
+  /* ---- 一問一答：一覧（バーッと並べる）モード ---- */
+  #qaList{
+    display:none;
+    flex-direction:column;
+    gap:10px;
+    margin-top:10px;
+  }
+  .qa-list-item{
+    position:relative;
+    background: var(--panel);
+    border-radius: var(--radius);
+    overflow:hidden;
+  }
+  .qa-list-item.mem-lvl-2{
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .qa-list-item.mem-lvl-1{
+    outline: 2px solid #d9a441;
+    outline-offset: -2px;
+  }
+  .qa-num-badge{
+    position:absolute;
+    right:6px; top:6px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 7px;
+    border-radius:10px;
+    z-index:6;
+    pointer-events:none;
+  }
+  .qa-list-imgwrap{
+    position:relative;
+    width:100%;
+    background:#000;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .qa-list-imgwrap img{
+    width:100%;
+    display:block;
+  }
+  .qa-list-mask{
+    position:absolute;
+    background: var(--panel);
+    border: 1px dashed var(--text-dim);
+    box-sizing:border-box;
+  }
+  .qa-list-badge{
+    position:absolute;
+    left:6px; top:6px;
+    background: var(--accent);
+    color:#08251c;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 7px;
+    border-radius:10px;
+    z-index:3;
+    display:none;
+  }
+  .qa-list-item.mem-lvl-2 .qa-list-badge{ display:block; background:var(--accent); color:#08251c; }
+  .qa-list-item.mem-lvl-1 .qa-list-badge{ display:block; background:#d9a441; color:#241a04; }
+  .qa-list-actions{
+    display:flex;
+    gap:6px;
+    padding:6px;
+  }
+  .qa-list-actions button{
+    flex:1;
+    padding:8px 0;
+    font-size:12.5px;
+    background:#2a3140;
+    color:var(--text);
+  }
+  .qa-list-actions button.active{
+    background: var(--accent);
+    color:#08251c;
+    font-weight:600;
+  }
+  .qa-list-actions button.mem-lvl-1{
+    background:#d9a441;
+    color:#241a04;
+    font-weight:600;
+  }
+  .qa-list-actions .qa-list-del{
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    flex:0 0 60px;
+  }
+  .qa-empty-filter{
+    color: var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    padding: 30px 0;
+    display:none;
+  }
+
+  /* ---- 選択モード：サムネイル／一覧アイテムのチェック表示 ---- */
+  .thumb.selectable, .qa-list-item.selectable{
+    cursor:pointer;
+  }
+  .select-check{
+    position:absolute;
+    top:4px; left:4px;
+    width:22px; height:22px;
+    border-radius:50%;
+    background:rgba(0,0,0,0.55);
+    border:2px solid #fff;
+    z-index:4;
+    display:none;
+  }
+  .thumb.select-mode .select-check, .qa-list-item.select-mode .select-check{
+    display:block;
+  }
+  .thumb.selected .select-check, .qa-list-item.selected .select-check{
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .thumb.selected, .qa-list-item.selected{
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .hint-btn{
+    position:absolute;
+    top:4px; left:4px;
+    z-index:4;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    border-radius:8px;
+    font-size:11px;
+    padding:3px 6px;
+  }
+  .thumb.select-mode .hint-btn{ display:none; }
+
+  /* ---- 選択モード時の一括操作バー ---- */
+  .bulk-bar{
+    display:none;
+    gap:8px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  .bulk-bar.active{ display:flex; }
+  .bulk-bar button{ flex:1; }
+
+  /* ---- ヒント表示欄(答えと一緒に開く) ---- */
+  .hint-box{
+    display:none;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-radius:10px;
+    padding:8px 10px;
+    margin-top:8px;
+    font-size:13px;
+    color: var(--text);
+    white-space:pre-wrap;
+  }
+  .hint-box.show{ display:block; }
+
+  /* ---- 練習画面：スクロールしても常に見える操作バー ---- */
+  #qaStickyBar{
+    position:sticky;
+    bottom:0;
+    left:0; right:0;
+    background: var(--bg);
+    padding:8px 0 4px;
+    margin-top:10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    border-top:1px solid #2a3140;
+    z-index:20;
+  }
+  #qaStickyBar .row{ margin-top:0; }
+  #qaSaveOrderBtn.dirty{
+    background: var(--danger);
+    color:#fff;
+    font-weight:700;
+  }
+
+  /* ---- ストップウォッチ ---- */
+  #qaStopwatch{
+    align-items:center;
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding:8px 10px;
+  }
+  #qaStopwatchTime{
+    font-size:20px;
+    font-weight:700;
+    font-variant-numeric: tabular-nums;
+    flex:1;
+  }
+
+  /* ---- フォルダ／セットのブラウザ表示(最初は一覧だけ、開くと中身) ---- */
+  .browse-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#242b38;
+    border-radius:10px;
+    padding:10px 12px;
+    margin-bottom:8px;
+  }
+  .browse-item .browse-main{
+    flex:1;
+    min-width:0;
+    cursor:pointer;
+  }
+  .browse-item .browse-title{
+    font-size:14px;
+    color:var(--text);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .browse-item .browse-sub{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .browse-item .browse-actions{
+    display:flex;
+    gap:6px;
+    flex-shrink:0;
+  }
+  .browse-item .browse-actions button{
+    padding:6px 8px;
+    font-size:12px;
+  }
+  .browse-item input[type="checkbox"]{
+    width:20px; height:20px;
+    flex-shrink:0;
+    display:none;
+  }
+  .browse-item.select-mode input[type="checkbox"]{ display:block; }
+  .browse-empty{
+    color: var(--text-dim);
+    font-size:13px;
+    text-align:center;
+    padding:16px 0;
+  }
+
+  /* ---- 汎用ピッカー(移動先などを選ぶための簡易オーバーレイ) ---- */
+  #pickerOverlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:100;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  #pickerOverlay.show{ display:flex; }
+  #pickerSheet{
+    background: var(--panel);
+    border-radius: 16px 16px 0 0;
+    width:100%;
+    max-width:520px;
+    max-height:75vh;
+    overflow-y:auto;
+    padding:16px;
+  }
+  #pickerTitle{
+    font-size:15px;
+    font-weight:700;
+    margin-bottom:10px;
+  }
+  .picker-option{
+    width:100%;
+    text-align:left;
+    background:#242b38;
+    color:var(--text);
+    border-radius:10px;
+    padding:12px;
+    margin-bottom:8px;
+    font-size:14px;
+  }
+  .picker-cancel{
+    width:100%;
+    background:transparent;
+    color:var(--text-dim);
+    border:1px solid #3a4150;
+  }
+</style>
+</head>
+<body>
+
+<h1>単語帳スキャナー</h1>
+<div class="sub">枠の中を撮ってたまったらPDFにまとめます（枚数の上限はありません）</div>
+
+<div class="panel">
+  <div id="cameraWrap">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="frame" class="size-medium">
+      <div id="previewMaskTop" class="preview-mask"></div>
+      <div id="previewMaskBottom" class="preview-mask"></div>
+      <div id="previewMaskLeft" class="preview-mask"></div>
+      <div id="previewMaskRight" class="preview-mask"></div>
+      <div id="maskHandleTop" class="mask-handle" style="display:none;"></div>
+      <div id="maskHandleBottom" class="mask-handle" style="display:none;"></div>
+      <div id="maskHandleLeft" class="mask-handle" style="display:none;"></div>
+      <div id="maskHandleRight" class="mask-handle" style="display:none;"></div>
+    </div>
+    <div id="flash"></div>
+    <div id="zoomControl">
+      <span id="zoomVal">1.0x</span>
+      <input type="range" id="zoomSlider" min="1" max="3" step="0.02" value="1" orient="vertical">
+    </div>
+    <div id="cameraHint">枠の中に単語を収めてください</div>
+  </div>
+
+  <div class="row">
+    <button class="btn-toggle" data-size="large">大</button>
+    <button class="btn-toggle active" data-size="medium">中</button>
+    <button class="btn-toggle" data-size="small">小</button>
+    <button class="btn-toggle" data-size="thin">極細</button>
+    <button class="btn-toggle" data-size="custom">カスタム</button>
+  </div>
+
+  <div class="row" id="orientRow">
+    <button class="btn-toggle active" data-orient="horizontal">横向きの枠</button>
+    <button class="btn-toggle" data-orient="vertical">縦向きの枠</button>
+  </div>
+
+  <!-- 「カスタム」を選んだときだけ表示される、枠のサイズを自分で
+       調節するためのパネル。スライダーで横幅・縦幅を直接指定できる。
+       普段は非表示(display:none)にしておく -->
+  <div class="row" id="customPanel" style="display:none; flex-direction:column;">
+    <div class="custom-slider-row">
+      <span class="custom-slider-label">横幅</span>
+      <input type="range" id="customWidth" min="5" max="100" step="1" value="75">
+      <span class="custom-slider-val" id="customWidthVal">75%</span>
+    </div>
+    <div class="custom-slider-row">
+      <span class="custom-slider-label">縦幅</span>
+      <input type="range" id="customHeight" min="5" max="100" step="1" value="22">
+      <span class="custom-slider-val" id="customHeightVal">22%</span>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <select id="templateSelect"><option value="">（保存したテンプレートなし）</option></select>
+    </div>
+    <div class="row">
+      <button id="applyTemplateBtn" class="btn-secondary">テンプレートを適用</button>
+      <button id="deleteTemplateBtn" class="btn-danger">削除</button>
+    </div>
+    <div class="row">
+      <button id="saveTemplateBtn" class="btn-secondary" style="flex:1">今のカスタム枠をテンプレートとして保存</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="startBtn" class="btn-secondary">カメラを起動</button>
+    <button id="flipBtn" class="btn-secondary">カメラ切替</button>
+  </div>
+
+  <div class="row">
+    <button id="shootBtn" class="btn-main" disabled>撮影する</button>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<div class="panel">
+  <div id="countLabel">撮影済み：<b id="countNum">0</b>枚</div>
+  <div class="row">
+    <button id="shuffleBtn" class="btn-secondary" style="flex:1">並び順をランダムにする</button>
+    <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
+  </div>
+  <div id="bulkBar" class="bulk-bar">
+    <button id="bulkSelectAllBtn" class="btn-secondary">全部選択</button>
+    <button id="bulkSelectNoneBtn" class="btn-secondary">選択解除</button>
+    <button id="bulkRotateBtn" class="btn-secondary">選んだカードを90度回転</button>
+    <button id="bulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
+    <button id="bulkMoveBtn" class="btn-secondary">選んだカードをセットへ移動</button>
+  </div>
+  <div id="thumbs"></div>
+  <div id="emptyNote" class="empty-note">まだ撮影した単語がありません</div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <select id="pageSize">
+      <option value="a4">A4で作る</option>
+      <option value="a5">A5で作る</option>
+    </select>
+  </div>
+  <!-- 列数を1〜8列の間で自由に選べるステッパー。
+       ボタンで±1ずつ変えられるので、数字入力が苦手でも操作しやすい -->
+  <div class="row" style="align-items:center;">
+    <span class="custom-slider-label" style="width:auto;">列数</span>
+    <button id="colsMinus" class="btn-secondary" style="flex:0 0 44px;">－</button>
+    <input type="number" id="layoutCols" min="1" max="8" value="2" readonly
+           style="width:56px; text-align:center; background:#2a3140; color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
+    <button id="colsPlus" class="btn-secondary" style="flex:0 0 44px;">＋</button>
+    <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
+  </div>
+  <div class="row">
+    <button id="pdfBtn" class="btn-main" disabled>PDFを作成してダウンロード</button>
+  </div>
+  <div class="row">
+    <button id="zipBtn" class="btn-secondary" style="flex:1" disabled>画像をまとめて保存（ZIP）</button>
+  </div>
+  <div class="row">
+    <button id="resetBtn" class="btn-danger" style="flex:1">全部消してやり直す</button>
+  </div>
+</div>
+
+<!-- ===== 一問一答（フラッシュカード）機能 =====
+     PDFにはせず、専用の「練習画面」を別に開いて使う機能。
+     隠す範囲(上下左右)は、下のスライダーではなく、カメラ枠の
+     ふち(境界線)を直接タップ＆ドラッグして伸び縮みさせる方式にした -->
+<div class="panel">
+  <div class="row">
+    <button id="qaToggleBtn" class="btn-toggle" style="flex:1">一問一答モード（隠す範囲の編集）を有効にする</button>
+  </div>
+  <div id="maskHint" class="sub" style="display:none; margin:6px 0 0;">
+    カメラ枠のふちに出た白いつまみを指でつかんでドラッグすると、隠す範囲(グレーの膜)を伸び縮みできます。
+  </div>
+</div>
+
+<!-- ===== 一問一答セット(名前をつけて保存) =====
+     今撮っている写真をひとまとまりの「セット」として名前をつけて保存し、
+     あとから選んで練習できるようにする機能。ブラウザの中(localStorage)に
+     保存されるので、同じNetlifyのURLで開いたときだけ復元できる -->
+<div class="panel">
+  <div class="row">
+    <button id="qaViewBtn" class="btn-main" disabled>今の写真で練習する（保存せずに）</button>
+  </div>
+  <div class="row">
+    <select id="folderSelect"><option value="">（フォルダなし）</option></select>
+    <button id="newFolderBtn" class="btn-secondary">＋新規フォルダ</button>
+  </div>
+  <div class="row">
+    <button id="saveDeckBtn" class="btn-secondary" style="flex:1" disabled>今の写真を名前をつけてセットに保存（選んだフォルダに入ります）</button>
+  </div>
+</div>
+
+<!-- ===== フォルダ／セットの一覧 =====
+     最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
+     その中のセット一覧が表示される（中身は最初は出さない） -->
+<div class="panel">
+  <div id="folderListPanel">
+    <div class="sub" style="margin-bottom:8px;">フォルダを押すと中のセットが表示されます</div>
+    <div id="folderListItems"></div>
+  </div>
+
+  <div id="deckListPanel" style="display:none;">
+    <div class="row">
+      <button id="backToFoldersBtn" class="btn-secondary" style="flex:1">← フォルダ一覧に戻る</button>
+    </div>
+    <div class="sub" id="deckListTitle" style="margin:8px 0;"></div>
+    <div class="row">
+      <button id="deckSelectModeBtn" class="btn-secondary" style="flex:1">セットを選択する</button>
+    </div>
+    <div id="deckBulkBar" class="bulk-bar">
+      <button id="deckBulkMoveBtn" class="btn-secondary">選んだセットを別フォルダへ移動</button>
+      <button id="deckBulkDeleteBtn" class="btn-danger">選んだセットを削除</button>
+    </div>
+    <div id="deckListItems"></div>
+  </div>
+</div>
+
+<!-- ===== データの引き継ぎ(端末間の同期の代わり) =====
+     自動で他の端末と同期する仕組みはこのアプリには無いため、
+     代わりに全データを1つのファイルに書き出して、それを別の端末で
+     読み込むことでセットを引き継げるようにしている -->
+<div class="panel">
+  <div class="sub" style="margin-bottom:8px;">別の端末とデータを共有したいときは、ここからファイルに書き出して、別の端末でそのファイルを読み込んでください。読み込みは上書きではなく追加なので、前からあったカードが消えることはありません。フォルダ単位・セット単位で書き出したいときは、それぞれの一覧にある「書き出す」ボタンを使ってください。</div>
+  <div class="row">
+    <button id="exportDataBtn" class="btn-secondary" style="flex:1">全データを書き出す（ファイル保存）</button>
+  </div>
+  <div class="row">
+    <button id="importDataBtn" class="btn-secondary" style="flex:1">ファイルからデータを読み込む</button>
+    <input type="file" id="importDataInput" accept="application/json" style="display:none;">
+  </div>
+</div>
+
+<!-- ===== 一問一答：練習画面(全画面) =====
+     開いている間は他のパネルの上に覆いかぶさって表示される、
+     独立した練習用の画面。画像をタップすると隠した部分の
+     表示/非表示が切り替わり、前へ/次へで別のカードに移動する -->
+<div id="qaViewer">
+  <h1 id="qaDeckTitle" style="margin-bottom:2px;">一問一答</h1>
+  <div id="qaCountLabel" style="margin-bottom:6px; font-size:14px; color: var(--text-dim);">
+    カード <b id="qaIndexNum" style="color:var(--text);">1</b> / <span id="qaTotalNum">1</span>
+    ／暗記済み <b id="qaMemNum" style="color:var(--text);">0</b> / <span id="qaAllNum">0</span>
+  </div>
+
+  <div class="qa-sub-row">
+    <button id="qaModeOneBtn" class="btn-toggle active">1枚ずつ表示</button>
+    <button id="qaModeListBtn" class="btn-toggle">一覧表示（長押しで並べ替え）</button>
+  </div>
+  <div class="qa-sub-row">
+    <button id="qaFilterAllBtn" class="btn-toggle active" data-filter="all">全部表示</button>
+    <button id="qaFilterUnBtn" class="btn-toggle" data-filter="0">未暗記のみ</button>
+    <button id="qaFilterMidBtn" class="btn-toggle" data-filter="1">うろ覚えのみ</button>
+    <button id="qaFilterMemBtn" class="btn-toggle" data-filter="2">暗記済みのみ</button>
+  </div>
+
+  <div id="qaOneWrap">
+    <div id="qaCardWrap">
+      <img id="qaCardImg" src="" alt="カード">
+      <div id="qaMaskTop" class="qa-mask"></div>
+      <div id="qaMaskBottom" class="qa-mask"></div>
+      <div id="qaMaskLeft" class="qa-mask"></div>
+      <div id="qaMaskRight" class="qa-mask"></div>
+      <div id="qaCardNumBadge" class="qa-num-badge"></div>
+      <div class="qa-card-actions">
+        <button id="qaHintBtn">ヒント編集</button>
+        <button id="qaMemBtn">暗記済みにする</button>
+        <button id="qaDelBtn" class="qa-del-single">削除</button>
+      </div>
+    </div>
+    <div id="qaHintBox" class="hint-box"></div>
+    <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
+    <div class="row">
+      <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
+      <button id="qaNextBtn" class="btn-secondary" style="flex:1">次へ →</button>
+    </div>
+  </div>
+
+  <div id="qaList"></div>
+  <div id="qaEmptyFilter" class="qa-empty-filter">このフィルターに当てはまるカードがありません</div>
+
+  <div id="qaStickyBar">
+    <div class="row" id="qaStopwatch">
+      <span id="qaStopwatchTime">00:00.0</span>
+      <button id="qaStopwatchToggleBtn" class="btn-secondary">開始</button>
+      <button id="qaStopwatchResetBtn" class="btn-secondary">リセット</button>
+    </div>
+    <div class="qa-sub-row">
+      <button id="qaSelectModeBtn" class="btn-toggle">カードを選択する</button>
+      <button id="qaShuffleBtn" class="btn-toggle">シャッフル</button>
+    </div>
+    <div id="qaBulkBar" class="bulk-bar">
+      <button id="qaBulkSelectAllBtn" class="btn-secondary">全部選択</button>
+      <button id="qaBulkSelectNoneBtn" class="btn-secondary">選択解除</button>
+      <button id="qaBulkRotateBtn" class="btn-secondary">選んだカードを90度回転</button>
+      <button id="qaBulkDeleteBtn" class="btn-danger">選んだカードを削除</button>
+      <button id="qaBulkMoveBtn" class="btn-secondary">選んだカードを別セットへ移動</button>
+    </div>
+    <div class="row">
+      <button id="qaSaveOrderBtn" class="btn-secondary" style="flex:1" disabled>並び替えを保存</button>
+      <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 移動先などを選ぶための簡易ピッカー ===== -->
+<div id="pickerOverlay">
+  <div id="pickerSheet">
+    <div id="pickerTitle"></div>
+    <div id="pickerOptions"></div>
+    <button class="picker-cancel" id="pickerCancelBtn">キャンセル</button>
+  </div>
+</div>
+
+<!-- PDF作成に使うライブラリは、JS側で複数の読み込み元を
+     順番に試すようにしています(下のscript内のensureJsPDF)。
+     どこか1つが繋がらなくても他で読み込めるためです。 -->
+
+<script>
+/* =========================================================
+   単語帳スキャナー本体のスクリプト
+   非エンジニアの方でも追いやすいように、なるべく処理ごとに
+   コメントを書いています。
+   ========================================================= */
+
+/* ---------- PDFライブラリ(jsPDF)の読み込み ----------
+   1箇所のCDNだけに頼ると、そこに繋がらないときにPDFが
+   作れなくなってしまうため、複数の読み込み元を順番に試す。
+   ページを開いた時点でバックグラウンドで読み込みを始めておき、
+   「PDFを作成」ボタンを押した瞬間には読み込み済みの状態を
+   目指す（ボタンを押した後にawaitで待つと、iOS Safariで
+   ダウンロードがブロックされることがあるため）。
+*/
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = ()=> resolve();
+    s.onerror = ()=> reject(new Error('読み込み失敗: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureJsPDF(){
+  if(window.jspdf && window.jspdf.jsPDF) return true;
+  const candidates = [
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+    'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'
+  ];
+  for(const url of candidates){
+    try{
+      await loadScriptOnce(url);
+      if(window.jspdf && window.jspdf.jsPDF) return true;
+    }catch(e){
+      console.warn(e);
+    }
+  }
+  return false;
+}
+
+// ページを開いたらすぐ先読みしておく
+ensureJsPDF();
+
+/* ---------- 画像まとめ保存(ZIP)に使うライブラリ(JSZip)の読み込み ----------
+   jsPDFと同じ考え方で、複数の読み込み元を順番に試す */
+async function ensureJSZip(){
+  if(window.JSZip) return true;
+  const candidates = [
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+    'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
+  ];
+  for(const url of candidates){
+    try{
+      await loadScriptOnce(url);
+      if(window.JSZip) return true;
+    }catch(e){
+      console.warn(e);
+    }
+  }
+  return false;
+}
+ensureJSZip();
+
+const video       = document.getElementById('video');
+const frameEl     = document.getElementById('frame');
+const flashEl     = document.getElementById('flash');
+const startBtn    = document.getElementById('startBtn');
+const flipBtn     = document.getElementById('flipBtn');
+const shootBtn    = document.getElementById('shootBtn');
+const pdfBtn      = document.getElementById('pdfBtn');
+const zipBtn      = document.getElementById('zipBtn');
+const resetBtn    = document.getElementById('resetBtn');
+const statusEl    = document.getElementById('status');
+const thumbsEl    = document.getElementById('thumbs');
+const countNumEl  = document.getElementById('countNum');
+const emptyNoteEl = document.getElementById('emptyNote');
+const pageSizeSel = document.getElementById('pageSize');
+const layoutColsSel = document.getElementById('layoutCols');
+const zoomSlider  = document.getElementById('zoomSlider');
+const zoomValEl   = document.getElementById('zoomVal');
+const shuffleBtn  = document.getElementById('shuffleBtn');
+const selectModeBtn = document.getElementById('selectModeBtn');
+const bulkBar        = document.getElementById('bulkBar');
+const bulkSelectAllBtn  = document.getElementById('bulkSelectAllBtn');
+const bulkSelectNoneBtn = document.getElementById('bulkSelectNoneBtn');
+const bulkRotateBtn  = document.getElementById('bulkRotateBtn');
+const bulkDeleteBtn  = document.getElementById('bulkDeleteBtn');
+const bulkMoveBtn    = document.getElementById('bulkMoveBtn');
+const orientRow   = document.getElementById('orientRow');
+const customPanel = document.getElementById('customPanel');
+const customWidthSlider  = document.getElementById('customWidth');
+const customHeightSlider = document.getElementById('customHeight');
+const customWidthVal  = document.getElementById('customWidthVal');
+const customHeightVal = document.getElementById('customHeightVal');
+const templateSelect   = document.getElementById('templateSelect');
+const saveTemplateBtn  = document.getElementById('saveTemplateBtn');
+const applyTemplateBtn = document.getElementById('applyTemplateBtn');
+const deleteTemplateBtn= document.getElementById('deleteTemplateBtn');
+const colsMinus   = document.getElementById('colsMinus');
+const colsPlus    = document.getElementById('colsPlus');
+
+// ---- 一問一答(マスク)関連 ----
+const qaToggleBtn   = document.getElementById('qaToggleBtn');
+const maskHint      = document.getElementById('maskHint');
+const previewMaskTop    = document.getElementById('previewMaskTop');
+const previewMaskBottom = document.getElementById('previewMaskBottom');
+const previewMaskLeft   = document.getElementById('previewMaskLeft');
+const previewMaskRight  = document.getElementById('previewMaskRight');
+const maskHandleTop    = document.getElementById('maskHandleTop');
+const maskHandleBottom = document.getElementById('maskHandleBottom');
+const maskHandleLeft   = document.getElementById('maskHandleLeft');
+const maskHandleRight  = document.getElementById('maskHandleRight');
+
+const qaViewBtn      = document.getElementById('qaViewBtn');
+const saveDeckBtn    = document.getElementById('saveDeckBtn');
+const folderSelect   = document.getElementById('folderSelect');
+const newFolderBtn   = document.getElementById('newFolderBtn');
+
+// ---- フォルダ／セットのブラウザ表示 ----
+const folderListPanel = document.getElementById('folderListPanel');
+const folderListItems = document.getElementById('folderListItems');
+const deckListPanel   = document.getElementById('deckListPanel');
+const backToFoldersBtn= document.getElementById('backToFoldersBtn');
+const deckListTitle   = document.getElementById('deckListTitle');
+const deckSelectModeBtn = document.getElementById('deckSelectModeBtn');
+const deckBulkBar     = document.getElementById('deckBulkBar');
+const deckBulkMoveBtn = document.getElementById('deckBulkMoveBtn');
+const deckBulkDeleteBtn = document.getElementById('deckBulkDeleteBtn');
+const deckListItems   = document.getElementById('deckListItems');
+
+// ---- データ書き出し／読み込み ----
+const exportDataBtn  = document.getElementById('exportDataBtn');
+const importDataBtn  = document.getElementById('importDataBtn');
+const importDataInput= document.getElementById('importDataInput');
+
+// ---- 移動先などを選ぶ簡易ピッカー ----
+const pickerOverlay  = document.getElementById('pickerOverlay');
+const pickerTitle    = document.getElementById('pickerTitle');
+const pickerOptions  = document.getElementById('pickerOptions');
+const pickerCancelBtn= document.getElementById('pickerCancelBtn');
+
+const qaViewer    = document.getElementById('qaViewer');
+const qaDeckTitle = document.getElementById('qaDeckTitle');
+const qaOneWrap   = document.getElementById('qaOneWrap');
+const qaCardWrap  = document.getElementById('qaCardWrap');
+const qaCardImg   = document.getElementById('qaCardImg');
+const qaIndexNum  = document.getElementById('qaIndexNum');
+const qaTotalNum  = document.getElementById('qaTotalNum');
+const qaMemNum    = document.getElementById('qaMemNum');
+const qaAllNum    = document.getElementById('qaAllNum');
+const qaMaskTop    = document.getElementById('qaMaskTop');
+const qaMaskBottom = document.getElementById('qaMaskBottom');
+const qaMaskLeft   = document.getElementById('qaMaskLeft');
+const qaMaskRight  = document.getElementById('qaMaskRight');
+const qaHintBtn   = document.getElementById('qaHintBtn');
+const qaHintBox   = document.getElementById('qaHintBox');
+const qaMemBtn    = document.getElementById('qaMemBtn');
+const qaDelBtn    = document.getElementById('qaDelBtn');
+const qaPrevBtn   = document.getElementById('qaPrevBtn');
+const qaNextBtn   = document.getElementById('qaNextBtn');
+const qaCloseBtn  = document.getElementById('qaCloseBtn');
+const qaModeOneBtn  = document.getElementById('qaModeOneBtn');
+const qaModeListBtn = document.getElementById('qaModeListBtn');
+const qaFilterAllBtn = document.getElementById('qaFilterAllBtn');
+const qaFilterUnBtn  = document.getElementById('qaFilterUnBtn');
+const qaFilterMidBtn = document.getElementById('qaFilterMidBtn');
+const qaFilterMemBtn = document.getElementById('qaFilterMemBtn');
+const qaShuffleBtn   = document.getElementById('qaShuffleBtn');
+const qaSelectModeBtn = document.getElementById('qaSelectModeBtn');
+const qaBulkBar       = document.getElementById('qaBulkBar');
+const qaBulkSelectAllBtn  = document.getElementById('qaBulkSelectAllBtn');
+const qaBulkSelectNoneBtn = document.getElementById('qaBulkSelectNoneBtn');
+const qaBulkRotateBtn = document.getElementById('qaBulkRotateBtn');
+const qaBulkDeleteBtn = document.getElementById('qaBulkDeleteBtn');
+const qaBulkMoveBtn   = document.getElementById('qaBulkMoveBtn');
+const qaCardNumBadge  = document.getElementById('qaCardNumBadge');
+const qaSaveOrderBtn  = document.getElementById('qaSaveOrderBtn');
+const qaList         = document.getElementById('qaList');
+const qaEmptyFilter  = document.getElementById('qaEmptyFilter');
+const qaStopwatchTime = document.getElementById('qaStopwatchTime');
+const qaStopwatchToggleBtn = document.getElementById('qaStopwatchToggleBtn');
+const qaStopwatchResetBtn  = document.getElementById('qaStopwatchResetBtn');
+
+// 一問一答モードが有効かどうか、隠す範囲(%)は何%か、を保持しておく変数。
+// ページを開き直しても同じ設定を使えるよう、localStorageにも保存する
+const QA_SETTINGS_KEY = 'wordQaMaskSettings';
+const QA_DECKS_KEY = 'wordQaDecks';
+let qaEnabled = false;
+let maskTop = 0, maskBottom = 0, maskLeft = 0, maskRight = 50;
+
+// 練習画面で今どのセットを表示しているか
+// ({name, shots, mask, deckRecord}) deckRecordは保存済みセットを開いた場合だけ
+// 中身(IndexedDBから取ってきたオブジェクトそのもの)が入る。
+// これがあれば、カードを編集するたびにそのままストレージへ上書き保存する。
+let qaPractice = { name: '', shots: [], mask: { top:0, bottom:0, left:0, right:50 }, deckRecord: null };
+let qaRevealed = false;   // 今のカードが「隠した部分を表示中」かどうか
+let qaMode = 'one';       // 'one'=1枚ずつ表示 / 'list'=一覧表示
+let qaFilter = 'all';     // 'all' / '0'(未暗記) / '1'(うろ覚え) / '2'(暗記済み)
+let qaCursor = 0;         // 1枚ずつ表示のとき、フィルター後の並びの中で何枚目を見ているか
+let qaListRevealed = new Set(); // 一覧表示で、今どのカードの答えを開いているか(カードのidを保持)
+let qaOrderDirty = false;  // 並べ替えをまだ保存していない状態かどうか
+let qaSelectMode = false;  // カード選択モード(一覧表示のとき)が有効かどうか
+let qaSelectedIds = new Set(); // 選択中のカードのid
+
+// ---- ストップウォッチ ----
+let swElapsed = 0;      // これまでに経過した時間(ミリ秒)
+let swStartedAt = null; // 計測中なら開始時刻(performance.now())、停止中はnull
+let swTimer = null;
+
+function formatStopwatch(ms){
+  const totalSec = ms / 1000;
+  const m = Math.floor(totalSec / 60);
+  const s = Math.floor(totalSec % 60);
+  const d = Math.floor((ms % 1000) / 100);
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0') + '.' + d;
+}
+function renderStopwatch(){
+  const now = swStartedAt !== null ? (swElapsed + (performance.now() - swStartedAt)) : swElapsed;
+  qaStopwatchTime.textContent = formatStopwatch(now);
+}
+function resetStopwatch(){
+  clearInterval(swTimer);
+  swTimer = null;
+  swElapsed = 0;
+  swStartedAt = null;
+  qaStopwatchToggleBtn.textContent = '開始';
+  renderStopwatch();
+}
+qaStopwatchToggleBtn.addEventListener('click', ()=>{
+  if(swStartedAt === null){
+    swStartedAt = performance.now();
+    swTimer = setInterval(renderStopwatch, 100);
+    qaStopwatchToggleBtn.textContent = '一時停止';
+  }else{
+    swElapsed += performance.now() - swStartedAt;
+    swStartedAt = null;
+    clearInterval(swTimer);
+    swTimer = null;
+    qaStopwatchToggleBtn.textContent = '開始';
+    renderStopwatch();
+  }
+});
+qaStopwatchResetBtn.addEventListener('click', resetStopwatch);
+
+// 撮影した写真1枚(shot)にユニークなIDを振るための小さな関数
+function makeShotId(){
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ---------- 暗記度(3段階)：0=未暗記／1=うろ覚え／2=暗記済み ----------
+   古いデータ(memorizedという○/×だけの形式)が来た場合も、
+   ここで自動的に0か2に変換して補ってあげる */
+const MEM_LEVEL_LABELS = ['未暗記', 'うろ覚え', '暗記済み'];
+function normalizeMemLevel(s){
+  if(typeof s.memLevel !== 'number' || s.memLevel < 0 || s.memLevel > 2){
+    s.memLevel = s.memorized ? 2 : 0;
+  }
+  return s;
+}
+
+/* ---------- カードの画像を90度(時計回り)回転する ----------
+   canvasに描き直して、幅と高さを入れ替えたうえで保存し直す */
+function rotateShotImage(shot){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width/2, canvas.height/2);
+      ctx.rotate(Math.PI/2);
+      ctx.drawImage(img, -img.width/2, -img.height/2);
+      shot.dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      shot.width = canvas.width;
+      shot.height = canvas.height;
+      resolve();
+    };
+    img.onerror = reject;
+    img.src = shot.dataUrl;
+  });
+}
+async function rotateShots(list){
+  for(const shot of list){
+    await rotateShotImage(shot);
+  }
+}
+
+/* ---------- 書き出し用のファイルを1個作ってダウンロードする共通処理 ---------- */
+function makeExportPayload(folders, decks){
+  return {
+    appName: '単語帳スキャナー',
+    exportedAt: new Date().toISOString(),
+    folders: folders,
+    decks: decks
+  };
+}
+function downloadJSON(payload, filename){
+  const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 3000);
+}
+
+// 撮影枚数の上限は撤廃しました（以前は20枚→40枚でしたが、今は無制限です）。
+// 撮った画像を貯めておく配列。dataUrlに加えてwidth/heightも
+// 撮影した時点でまとめて持っておく（PDF作成時に読み直さないため）
+let shots = [];
+let currentStream = null;
+let facingMode = 'environment'; // 'environment'=背面カメラ, 'user'=内カメラ
+let currentTrack = null;
+let zoomMode = 'none';   // 'hardware' = 端末のズーム機能, 'css' = 映像を拡大表示
+
+function setStatus(msg, isError=false){
+  statusEl.textContent = msg;
+  statusEl.className = isError ? 'error' : '';
+}
+
+/* ---------- 枠のサイズ切り替え(大/中/小/極細/カスタム) ----------
+   「カスタム」を選んだときだけ、下にスライダーのパネルを表示して
+   横幅・縦幅を自分で自由に決められるようにしている。
+   その場合は「向き(横/縦)」ボタンの意味がなくなるので非表示にする
+   （カスタムでは横幅・縦幅を両方直接指定できるため、縦長も横長も
+   スライダーだけで作れる） */
+document.querySelectorAll('.btn-toggle[data-size]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.btn-toggle[data-size]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+
+    if(btn.dataset.size === 'custom'){
+      orientRow.style.display = 'none';
+      customPanel.style.display = 'flex';
+      frameEl.className = 'size-custom';
+      applyCustomFrameSize();
+    }else{
+      orientRow.style.display = '';
+      customPanel.style.display = 'none';
+      // カスタムで直接指定していたinlineのwidth/heightを解除して、
+      // CSSのクラス指定(size-large等)が効くようにする
+      frameEl.style.width = '';
+      frameEl.style.height = '';
+      // vertical(縦向き)のクラスは維持したまま、サイズのクラスだけ入れ替える
+      const isVertical = frameEl.classList.contains('vertical');
+      frameEl.className = 'size-' + btn.dataset.size + (isVertical ? ' vertical' : '');
+    }
+  });
+});
+
+/* ---------- カスタム枠：スライダーで横幅・縦幅を直接指定 ---------- */
+function applyCustomFrameSize(){
+  const w = customWidthSlider.value;
+  const h = customHeightSlider.value;
+  customWidthVal.textContent = w + '%';
+  customHeightVal.textContent = h + '%';
+  frameEl.style.width = w + '%';
+  frameEl.style.height = h + '%';
+}
+customWidthSlider.addEventListener('input', applyCustomFrameSize);
+customHeightSlider.addEventListener('input', applyCustomFrameSize);
+
+/* ---------- テンプレート機能 ----------
+   カスタム枠の「横幅・縦幅」の組み合わせに名前を付けて、
+   ブラウザの中(localStorage)に保存しておく機能。
+   ※ iPadのEdge/Safariなど、同じブラウザ・同じサイト(同じURL)で
+   開いたときだけ読み込める点に注意（別の端末やアプリには
+   引き継がれません）
+*/
+const TEMPLATE_KEY = 'wordFrameTemplates';
+
+function loadTemplates(){
+  try{
+    return JSON.parse(localStorage.getItem(TEMPLATE_KEY)) || [];
+  }catch(e){
+    return [];
+  }
+}
+
+function saveTemplatesToStorage(list){
+  localStorage.setItem(TEMPLATE_KEY, JSON.stringify(list));
+}
+
+function refreshTemplateSelect(){
+  const list = loadTemplates();
+  templateSelect.innerHTML = '';
+  if(list.length === 0){
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '（保存したテンプレートなし）';
+    templateSelect.appendChild(opt);
+    return;
+  }
+  list.forEach(t=>{
+    const opt = document.createElement('option');
+    opt.value = t.name;
+    opt.textContent = t.name + '（横' + t.width + '% / 縦' + t.height + '%）';
+    templateSelect.appendChild(opt);
+  });
+}
+
+saveTemplateBtn.addEventListener('click', ()=>{
+  const defaultName = '枠 ' + customWidthSlider.value + 'x' + customHeightSlider.value;
+  const name = prompt('テンプレート名を入力してください', defaultName);
+  if(!name) return; // キャンセルまたは空欄なら何もしない
+
+  const list = loadTemplates();
+  const newTemplate = {
+    name: name,
+    width: parseInt(customWidthSlider.value, 10),
+    height: parseInt(customHeightSlider.value, 10)
+  };
+  // 同じ名前がすでにあれば上書きする
+  const existingIdx = list.findIndex(t => t.name === name);
+  if(existingIdx >= 0){
+    list[existingIdx] = newTemplate;
+  }else{
+    list.push(newTemplate);
+  }
+  saveTemplatesToStorage(list);
+  refreshTemplateSelect();
+  templateSelect.value = name;
+  setStatus('テンプレート「' + name + '」を保存しました');
+});
+
+applyTemplateBtn.addEventListener('click', ()=>{
+  const name = templateSelect.value;
+  if(!name){
+    setStatus('適用するテンプレートを選んでください', true);
+    return;
+  }
+  const list = loadTemplates();
+  const t = list.find(t => t.name === name);
+  if(!t) return;
+  customWidthSlider.value = t.width;
+  customHeightSlider.value = t.height;
+  applyCustomFrameSize();
+  setStatus('テンプレート「' + name + '」を適用しました');
+});
+
+deleteTemplateBtn.addEventListener('click', ()=>{
+  const name = templateSelect.value;
+  if(!name) return;
+  if(!confirm('テンプレート「' + name + '」を削除します。よろしいですか？')) return;
+  let list = loadTemplates();
+  list = list.filter(t => t.name !== name);
+  saveTemplatesToStorage(list);
+  refreshTemplateSelect();
+  setStatus('テンプレート「' + name + '」を削除しました');
+});
+
+refreshTemplateSelect(); // ページを開いた時点で保存済みテンプレート一覧を表示
+
+/* ---------- PDFの列数を自由に選べるステッパー(1〜8列) ---------- */
+colsMinus.addEventListener('click', ()=>{
+  const v = Math.max(1, parseInt(layoutColsSel.value,10) - 1);
+  layoutColsSel.value = v;
+});
+colsPlus.addEventListener('click', ()=>{
+  const v = Math.min(8, parseInt(layoutColsSel.value,10) + 1);
+  layoutColsSel.value = v;
+});
+
+/* ---------- 一問一答：隠す範囲(マスク)機能 ----------
+   ONにすると、カメラ枠のふちに白いつまみが出てくる。
+   それを指でつかんでドラッグすると、隠す範囲(半透明の膜)を
+   上下左右それぞれ自由に伸び縮みできる。
+   ここで決めた割合は、「今の写真で練習する」やセット保存時に使われる。
+*/
+function loadQaSettings(){
+  try{
+    const saved = JSON.parse(localStorage.getItem(QA_SETTINGS_KEY));
+    if(saved){
+      maskTop = saved.top ?? 0;
+      maskBottom = saved.bottom ?? 0;
+      maskLeft = saved.left ?? 0;
+      maskRight = saved.right ?? 50;
+    }
+  }catch(e){ /* 保存データがなければ初期値のまま */ }
+  updateMaskDisplays();
+}
+
+function saveQaSettings(){
+  localStorage.setItem(QA_SETTINGS_KEY, JSON.stringify({
+    top: maskTop, bottom: maskBottom, left: maskLeft, right: maskRight
+  }));
+}
+
+// マスクの数値を、カメラ枠上の膜(previewMask)とつまみ(handle)の
+// 位置・大きさの両方に反映する
+function updateMaskDisplays(){
+  previewMaskTop.style.height = maskTop + '%';
+  previewMaskBottom.style.height = maskBottom + '%';
+  previewMaskLeft.style.width = maskLeft + '%';
+  previewMaskRight.style.width = maskRight + '%';
+
+  maskHandleTop.style.top = maskTop + '%';
+  maskHandleBottom.style.top = (100 - maskBottom) + '%';
+  maskHandleLeft.style.left = maskLeft + '%';
+  maskHandleRight.style.left = (100 - maskRight) + '%';
+}
+
+/* ---------- つまみをドラッグして数値を変える共通処理 ----------
+   axis: 'x'か'y'。ドラッグする向き(横方向か縦方向か)
+   invert: trueなら「ドラッグする向きと増減の向きが逆」(下/右の膜用)
+   setter: ドラッグ中の新しい値(0〜90)を受け取って反映する関数
+   getter: 現在の値を返す関数
+*/
+function makeMaskHandleDraggable(handleEl, axis, invert, getter, setter){
+  handleEl.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    handleEl.setPointerCapture(e.pointerId);
+    const frameRect = frameEl.getBoundingClientRect();
+    const sizePx = axis === 'y' ? frameRect.height : frameRect.width;
+    const startPos = axis === 'y' ? e.clientY : e.clientX;
+    const startVal = getter();
+
+    function onMove(ev){
+      const curPos = axis === 'y' ? ev.clientY : ev.clientX;
+      let deltaPct = ((curPos - startPos) / sizePx) * 100;
+      if(invert) deltaPct = -deltaPct;
+      const newVal = Math.round(Math.max(0, Math.min(90, startVal + deltaPct)));
+      setter(newVal);
+      updateMaskDisplays();
+    }
+    function onUp(){
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      saveQaSettings();
+    }
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+  });
+}
+
+makeMaskHandleDraggable(maskHandleTop,    'y', false, ()=>maskTop,    v=>maskTop=v);
+makeMaskHandleDraggable(maskHandleBottom, 'y', true,  ()=>maskBottom, v=>maskBottom=v);
+makeMaskHandleDraggable(maskHandleLeft,   'x', false, ()=>maskLeft,   v=>maskLeft=v);
+makeMaskHandleDraggable(maskHandleRight,  'x', true,  ()=>maskRight,  v=>maskRight=v);
+
+qaToggleBtn.addEventListener('click', ()=>{
+  qaEnabled = !qaEnabled;
+  qaToggleBtn.classList.toggle('active', qaEnabled);
+  maskHint.style.display = qaEnabled ? 'block' : 'none';
+  // カメラ枠の上の膜プレビュー＆つまみも、ON/OFFに合わせて表示/非表示
+  [previewMaskTop, previewMaskBottom, previewMaskLeft, previewMaskRight,
+   maskHandleTop, maskHandleBottom, maskHandleLeft, maskHandleRight].forEach(el=>{
+    el.style.display = qaEnabled ? 'block' : 'none';
+  });
+});
+
+loadQaSettings();
+
+/* ---------- 一問一答：名前をつけてセットとして保存 ----------
+   今撮っている写真ひとまとまりに名前をつけて保存しておき、
+   あとから選んで練習できる機能。
+
+   以前はlocalStorageというブラウザの保存領域にまとめて保存していましたが、
+   写真の枚数が増えると保存容量の上限(5MB程度)を超えてしまい、
+   「保存できない」不具合の原因になっていました。
+   IndexedDBという別の保存の仕組みに変更し、この上限を大きく緩和しています。 */
+const DECK_DB_NAME = 'wordScannerDB';
+const DECK_STORE_NAME = 'decks';
+const FOLDER_STORE_NAME = 'folders';
+
+// バージョンを2に上げて、フォルダ保存用のストア(folders)を追加。
+// 既にversion1で使っていた人のデータ(decksストア)はそのまま残る。
+function openDeckDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DECK_DB_NAME, 2);
+    req.onupgradeneeded = ()=>{
+      if(!req.result.objectStoreNames.contains(DECK_STORE_NAME)){
+        req.result.createObjectStore(DECK_STORE_NAME, { keyPath:'name' });
+      }
+      if(!req.result.objectStoreNames.contains(FOLDER_STORE_NAME)){
+        req.result.createObjectStore(FOLDER_STORE_NAME, { keyPath:'name' });
+      }
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+/* ---------- フォルダの読み書き ---------- */
+async function loadFolders(){
+  try{
+    const db = await openDeckDB();
+    return await new Promise((resolve, reject)=>{
+      const tx = db.transaction(FOLDER_STORE_NAME, 'readonly');
+      const req = tx.objectStore(FOLDER_STORE_NAME).getAll();
+      req.onsuccess = ()=> resolve(req.result || []);
+      req.onerror = ()=> reject(req.error);
+    });
+  }catch(e){
+    console.error(e);
+    return [];
+  }
+}
+
+async function saveFolderToStorage(folder){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(FOLDER_STORE_NAME, 'readwrite');
+    tx.objectStore(FOLDER_STORE_NAME).put(folder);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function deleteFolderFromStorage(name){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(FOLDER_STORE_NAME, 'readwrite');
+    tx.objectStore(FOLDER_STORE_NAME).delete(name);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function refreshFolderSelect(){
+  const list = await loadFolders();
+  const prevValue = folderSelect.value;
+  folderSelect.innerHTML = '';
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '（フォルダなし）';
+  folderSelect.appendChild(noneOpt);
+  list.forEach(f=>{
+    const opt = document.createElement('option');
+    opt.value = f.name;
+    opt.textContent = f.name;
+    folderSelect.appendChild(opt);
+  });
+  // 削除などの後も、選べるならさっきまでの選択を維持する
+  if([...folderSelect.options].some(o => o.value === prevValue)){
+    folderSelect.value = prevValue;
+  }
+}
+
+newFolderBtn.addEventListener('click', async ()=>{
+  const name = prompt('フォルダ名を入力してください', '');
+  if(!name) return;
+  await saveFolderToStorage({ name: name });
+  await refreshFolderSelect();
+  folderSelect.value = name;
+  setStatus('フォルダ「' + name + '」を作成しました');
+});
+
+async function loadDecks(){
+  try{
+    const db = await openDeckDB();
+    return await new Promise((resolve, reject)=>{
+      const tx = db.transaction(DECK_STORE_NAME, 'readonly');
+      const req = tx.objectStore(DECK_STORE_NAME).getAll();
+      req.onsuccess = ()=> resolve(req.result || []);
+      req.onerror = ()=> reject(req.error);
+    });
+  }catch(e){
+    console.error(e);
+    return [];
+  }
+}
+
+async function saveDeckToStorage(deck){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(DECK_STORE_NAME, 'readwrite');
+    tx.objectStore(DECK_STORE_NAME).put(deck);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function deleteDeckFromStorage(name){
+  const db = await openDeckDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(DECK_STORE_NAME, 'readwrite');
+    tx.objectStore(DECK_STORE_NAME).delete(name);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+// 以前(localStorage)にセットを保存していた場合、初回だけ
+// IndexedDBのほうへそのまま引っ越しさせる
+async function migrateOldDecksIfNeeded(){
+  try{
+    const raw = localStorage.getItem(QA_DECKS_KEY);
+    if(!raw) return;
+    const oldList = JSON.parse(raw) || [];
+    for(const d of oldList){
+      await saveDeckToStorage({
+        name: d.name,
+        folder: d.folder || '',
+        shots: (d.shots || []).map(s => normalizeMemLevel({
+          ...s,
+          mask: s.mask || d.mask,
+          id: s.id || makeShotId()
+        }))
+      });
+    }
+    localStorage.removeItem(QA_DECKS_KEY);
+  }catch(e){
+    console.warn('以前のセットの引っ越しに失敗しました', e);
+  }
+}
+
+/* ---------- 汎用ピッカー ----------
+   「移動先を選んでください」のような、リストから1つ選ばせる操作を
+   共通化した簡易オーバーレイ。options は { label, value } の配列。
+   選ばれたら value を、キャンセルされたら null を返す */
+function pickFromList(title, options){
+  return new Promise(resolve=>{
+    pickerTitle.textContent = title;
+    pickerOptions.innerHTML = '';
+    if(options.length === 0){
+      const p = document.createElement('div');
+      p.className = 'sub';
+      p.textContent = '選べる項目がありません';
+      pickerOptions.appendChild(p);
+    }
+    function finish(value){
+      pickerOverlay.classList.remove('show');
+      pickerCancelBtn.removeEventListener('click', onCancel);
+      resolve(value);
+    }
+    function onCancel(){ finish(null); }
+    options.forEach(opt=>{
+      const btn = document.createElement('button');
+      btn.className = 'picker-option';
+      btn.textContent = opt.label;
+      btn.addEventListener('click', ()=> finish(opt.value));
+      pickerOptions.appendChild(btn);
+    });
+    pickerCancelBtn.addEventListener('click', onCancel);
+    pickerOverlay.classList.add('show');
+  });
+}
+
+// フォルダを選ばせるための選択肢一覧(「フォルダなし」を含む)を作る
+async function folderPickOptions(){
+  const folders = await loadFolders();
+  return [{ label:'（フォルダなし）', value:'' }].concat(
+    folders.map(f => ({ label:'📁 ' + f.name, value:f.name }))
+  );
+}
+
+// 移動先の「セット」を選ばせるための選択肢一覧を作る。
+// excludeName を指定すると、そのセット自身は候補から外す
+async function deckPickOptions(excludeName){
+  const list = await loadDecks();
+  return list
+    .filter(d => d.name !== excludeName)
+    .map(d => ({
+      label: (d.folder ? ('📁' + d.folder + ' / ') : '') + d.name + '（' + d.shots.length + '枚）',
+      value: d.name
+    }));
+}
+
+/* ---------- フォルダ／セットのブラウザ表示 ----------
+   最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
+   その中のセット一覧が表示される。フォルダを経由せず全体を
+   俯瞰したいとき用に「（フォルダなし）」も1つの棚として扱う */
+let currentBrowseFolder = null; // null=フォルダ一覧を表示中。文字列(''含む)=そのフォルダの中を表示中
+let deckSelectMode = false;
+let selectedDeckNames = new Set();
+
+async function refreshBrowseView(){
+  if(currentBrowseFolder === null){
+    await renderFolderList();
+  }else{
+    await renderDeckList();
+  }
+}
+
+async function renderFolderList(){
+  const folders = await loadFolders();
+  const decks = await loadDecks();
+  folderListItems.innerHTML = '';
+
+  const countIn = (folderName) => decks.filter(d => (d.folder || '') === folderName).length;
+
+  const makeFolderRow = (label, folderValue, deletable)=>{
+    const row = document.createElement('div');
+    row.className = 'browse-item';
+
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">' + label + '</div>' +
+      '<div class="browse-sub">' + countIn(folderValue) + '個のセット</div>';
+    main.addEventListener('click', ()=>{
+      currentBrowseFolder = folderValue;
+      folderListPanel.style.display = 'none';
+      deckListPanel.style.display = 'block';
+      deckSelectMode = false;
+      selectedDeckNames = new Set();
+      renderDeckList();
+    });
+    row.appendChild(main);
+
+    const actions = document.createElement('div');
+    actions.className = 'browse-actions';
+
+    // このフォルダ(棚)だけを書き出す。データ移動でフォルダごと渡したいときに使う
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn-secondary';
+    exportBtn.textContent = '書き出す';
+    exportBtn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const inFolder = decks.filter(d => (d.folder || '') === folderValue);
+      const folderObj = folders.find(f => f.name === folderValue);
+      downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], inFolder), (folderValue || 'フォルダなし') + '.json');
+      setStatus('フォルダ「' + (folderValue || '（フォルダなし）') + '」を書き出しました');
+    });
+    actions.appendChild(exportBtn);
+
+    if(deletable){
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const inFolder = decks.filter(d => d.folder === folderValue);
+        const warn = inFolder.length > 0
+          ? 'フォルダ「' + folderValue + '」の中には' + inFolder.length + '個のセットがあります。フォルダを削除すると、中のセットもすべて削除されます。よろしいですか？'
+          : 'フォルダ「' + folderValue + '」を削除します。よろしいですか？';
+        if(!confirm(warn)) return;
+        for(const d of inFolder){
+          await deleteDeckFromStorage(d.name);
+        }
+        await deleteFolderFromStorage(folderValue);
+        await refreshFolderSelect();
+        await renderFolderList();
+        setStatus('フォルダ「' + folderValue + '」を削除しました');
+      });
+      actions.appendChild(delBtn);
+    }
+    row.appendChild(actions);
+
+    folderListItems.appendChild(row);
+  };
+
+  makeFolderRow('（フォルダなし）', '', false);
+  folders.forEach(f => makeFolderRow('📁 ' + f.name, f.name, true));
+
+  if(folders.length === 0 && decks.length === 0){
+    const note = document.createElement('div');
+    note.className = 'browse-empty';
+    note.textContent = 'まだ保存したセットがありません';
+    folderListItems.appendChild(note);
+  }
+}
+
+backToFoldersBtn.addEventListener('click', ()=>{
+  currentBrowseFolder = null;
+  deckListPanel.style.display = 'none';
+  folderListPanel.style.display = 'block';
+  renderFolderList();
+});
+
+deckSelectModeBtn.addEventListener('click', ()=>{
+  deckSelectMode = !deckSelectMode;
+  deckSelectModeBtn.classList.toggle('active', deckSelectMode);
+  selectedDeckNames = new Set();
+  deckBulkBar.classList.toggle('active', deckSelectMode);
+  renderDeckList();
+});
+
+deckBulkMoveBtn.addEventListener('click', async ()=>{
+  if(selectedDeckNames.size === 0) return;
+  const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
+  if(target === null) return;
+  const list = await loadDecks();
+  for(const name of selectedDeckNames){
+    const d = list.find(x => x.name === name);
+    if(!d) continue;
+    d.folder = target;
+    await saveDeckToStorage(d);
+  }
+  setStatus('選んだセットを移動しました');
+  deckSelectMode = false;
+  deckSelectModeBtn.classList.remove('active');
+  deckBulkBar.classList.remove('active');
+  selectedDeckNames = new Set();
+  await refreshFolderSelect();
+  await renderDeckList();
+});
+
+deckBulkDeleteBtn.addEventListener('click', async ()=>{
+  if(selectedDeckNames.size === 0) return;
+  if(!confirm('選んだ' + selectedDeckNames.size + '個のセットを削除します。よろしいですか？')) return;
+  for(const name of selectedDeckNames){
+    await deleteDeckFromStorage(name);
+  }
+  setStatus('選んだセットを削除しました');
+  deckSelectMode = false;
+  deckSelectModeBtn.classList.remove('active');
+  deckBulkBar.classList.remove('active');
+  selectedDeckNames = new Set();
+  await renderDeckList();
+});
+
+async function renderDeckList(){
+  const list = await loadDecks();
+  const decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
+  deckListTitle.textContent = currentBrowseFolder ? ('📁 ' + currentBrowseFolder) : '（フォルダなし）';
+  deckListItems.innerHTML = '';
+
+  if(decks.length === 0){
+    const note = document.createElement('div');
+    note.className = 'browse-empty';
+    note.textContent = 'このフォルダにはまだセットがありません';
+    deckListItems.appendChild(note);
+    return;
+  }
+
+  decks.forEach(d=>{
+    const row = document.createElement('div');
+    row.className = 'browse-item' + (deckSelectMode ? ' select-mode' : '');
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = selectedDeckNames.has(d.name);
+    check.addEventListener('click', (e)=> e.stopPropagation());
+    check.addEventListener('change', ()=>{
+      if(check.checked) selectedDeckNames.add(d.name);
+      else selectedDeckNames.delete(d.name);
+    });
+    row.appendChild(check);
+
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">' + d.name + '</div>' +
+      '<div class="browse-sub">' + d.shots.length + '枚</div>';
+    main.addEventListener('click', ()=>{
+      if(deckSelectMode){
+        check.checked = !check.checked;
+        check.dispatchEvent(new Event('change'));
+        return;
+      }
+      openQaViewer(d.name, d.shots, d.mask, d);
+    });
+    row.appendChild(main);
+
+    if(!deckSelectMode){
+      const actions = document.createElement('div');
+      actions.className = 'browse-actions';
+
+      const practiceBtn = document.createElement('button');
+      practiceBtn.className = 'btn-secondary';
+      practiceBtn.textContent = '練習';
+      practiceBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openQaViewer(d.name, d.shots, d.mask, d);
+      });
+
+      const moveBtn = document.createElement('button');
+      moveBtn.className = 'btn-secondary';
+      moveBtn.textContent = '移動';
+      moveBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
+        if(target === null) return;
+        d.folder = target;
+        await saveDeckToStorage(d);
+        await refreshFolderSelect();
+        await renderDeckList();
+        setStatus('セット「' + d.name + '」を移動しました');
+      });
+
+      // このセット(ファイル)1個だけを書き出す。データ移動でファイル単位で渡したいときに使う
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'btn-secondary';
+      exportBtn.textContent = '書き出す';
+      exportBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const allFolders = await loadFolders();
+        const folderObj = d.folder ? allFolders.find(f => f.name === d.folder) : null;
+        downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], [d]), d.name + '.json');
+        setStatus('セット「' + d.name + '」を書き出しました');
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(!confirm('セット「' + d.name + '」を削除します。よろしいですか？')) return;
+        await deleteDeckFromStorage(d.name);
+        await renderDeckList();
+        setStatus('セット「' + d.name + '」を削除しました');
+      });
+
+      actions.appendChild(practiceBtn);
+      actions.appendChild(moveBtn);
+      actions.appendChild(exportBtn);
+      actions.appendChild(delBtn);
+      row.appendChild(actions);
+    }
+
+    deckListItems.appendChild(row);
+  });
+}
+
+saveDeckBtn.addEventListener('click', async ()=>{
+  if(shots.length === 0) return;
+  const name = prompt('セットの名前を入力してください', '');
+  if(!name) return;
+
+  const newDeck = {
+    name: name,
+    folder: folderSelect.value || '',
+    // 写真ごとに記録しておいた「隠す範囲」の設定(mask)、
+    // ID・暗記済みフラグ・ヒントもそのまま保存する
+    shots: shots.map(s => ({
+      dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask,
+      id: s.id || makeShotId(),
+      memLevel: typeof s.memLevel === 'number' ? s.memLevel : (s.memorized ? 2 : 0),
+      hint: s.hint || ''
+    }))
+  };
+
+  saveDeckBtn.disabled = true;
+  setStatus('保存しています…');
+  try{
+    await saveDeckToStorage(newDeck);
+    await refreshBrowseView();
+    setStatus('セット「' + name + '」を保存しました（' + newDeck.shots.length + '枚）');
+  }catch(e){
+    console.error(e);
+    setStatus('保存に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }finally{
+    saveDeckBtn.disabled = shots.length === 0;
+  }
+});
+
+/* ---------- 全データの書き出し／読み込み(端末間の引き継ぎ用) ----------
+   読み込みは「上書き」ではなく「追加」。同じ名前のセットが既にある場合は、
+   もとのカードは残したまま、そこに含まれていない新しいカードだけを
+   追加する(idが同じカードは重複させない)。 */
+exportDataBtn.addEventListener('click', async ()=>{
+  try{
+    const folders = await loadFolders();
+    const decks = await loadDecks();
+    downloadJSON(makeExportPayload(folders, decks), '単語帳データ（全部）.json');
+    setStatus('データを書き出しました。このファイルを別の端末で読み込んでください');
+  }catch(e){
+    console.error(e);
+    setStatus('書き出しに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }
+});
+
+importDataBtn.addEventListener('click', ()=> importDataInput.click());
+
+// フォルダ・セットのデータを、既存データを消さずに「追加」でマージする
+async function importPayloadMerge(payload){
+  const existingFolders = await loadFolders();
+  const existingDecks = await loadDecks();
+  const folders = payload.folders || [];
+  const decks = payload.decks || [];
+
+  let newFolders = 0, newDecks = 0, updatedDecks = 0, newCards = 0;
+
+  for(const f of folders){
+    if(!existingFolders.some(ef => ef.name === f.name)){
+      await saveFolderToStorage(f);
+      existingFolders.push(f);
+      newFolders++;
+    }
+  }
+
+  for(const d of decks){
+    // 読み込むデータにID・ヒントが無い場合(古い書き出し)にも対応
+    d.shots = (d.shots || []).map(s => normalizeMemLevel({
+      ...s,
+      id: s.id || makeShotId(),
+      hint: s.hint || ''
+    }));
+    const existing = existingDecks.find(ed => ed.name === d.name);
+    if(!existing){
+      await saveDeckToStorage(d);
+      existingDecks.push(d);
+      newDecks++;
+      newCards += d.shots.length;
+    }else{
+      // 同じ名前のセットが既にある場合：前からあったカードは残したまま、
+      // まだ無いカード(idが一致しないもの)だけを追加する
+      const existingIds = new Set(existing.shots.map(s => s.id));
+      const toAdd = d.shots.filter(s => !existingIds.has(s.id));
+      existing.shots = existing.shots.concat(toAdd);
+      await saveDeckToStorage(existing);
+      updatedDecks++;
+      newCards += toAdd.length;
+    }
+  }
+
+  return { newFolders, newDecks, updatedDecks, newCards };
+}
+
+importDataInput.addEventListener('change', async ()=>{
+  const file = importDataInput.files[0];
+  importDataInput.value = '';
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const folders = payload.folders || [];
+    const decks = payload.decks || [];
+    if(!confirm('フォルダ' + folders.length + '個・セット' + decks.length + '個ぶんのデータを読み込みます。同じ名前のセットが既にある場合、前のカードは消さずに、新しいカードだけ追加されます。よろしいですか？')) return;
+    const result = await importPayloadMerge(payload);
+    await refreshFolderSelect();
+    await refreshBrowseView();
+    setStatus('データを読み込みました（新規セット' + result.newDecks + '個・追加更新' + result.updatedDecks + '個・追加カード' + result.newCards + '枚）');
+  }catch(e){
+    console.error(e);
+    setStatus('読み込みに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }
+});
+
+(async ()=>{
+  await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
+  await refreshFolderSelect();
+  await renderFolderList();
+})();
+
+/* ---------- 一問一答：練習画面(全画面) ----------
+   name/shots/maskを指定しないで呼ぶと「今の写真」で練習する。
+   セットを指定した場合はそのセットの内容で練習する。
+   deckRecordを渡しておくと、練習中にカードを編集(削除・並べ替え・
+   暗記済み切り替え)するたびに、そのままIndexedDBへ上書き保存される。 */
+function openQaViewer(name, practiceShots, mask, deckRecord){
+  const list = practiceShots || shots;
+  if(list.length === 0) return;
+
+  // 古い形式のデータ(ID・暗記度・ヒントが無いもの)にも対応
+  list.forEach(s=>{
+    if(!s.id) s.id = makeShotId();
+    normalizeMemLevel(s);
+    if(typeof s.hint !== 'string') s.hint = '';
+  });
+
+  qaPractice = {
+    name: name || '',
+    shots: list,
+    mask: mask || { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
+    deckRecord: deckRecord || null
+  };
+  qaDeckTitle.textContent = qaPractice.name ? ('一問一答：' + qaPractice.name) : '一問一答：今の写真';
+  qaMode = 'one';
+  qaFilter = 'all';
+  qaCursor = 0;
+  qaListRevealed = new Set();
+  qaOrderDirty = false;
+  qaSelectMode = false;
+  qaSelectedIds = new Set();
+  qaSelectModeBtn.classList.remove('active');
+  qaBulkBar.classList.remove('active');
+  updateQaSaveOrderBtn();
+  setQaModeButtons();
+  setQaFilterButtons();
+  qaViewer.style.display = 'block';
+  resetStopwatch();
+  renderQaAll();
+}
+
+/* ---------- カードを編集した後の後始末 ----------
+   保存済みセットを練習中ならストレージへ上書き保存し、
+   「今の写真」を練習中なら、上のサムネイル一覧にも反映する */
+function afterQaMutation(){
+  if(qaPractice.deckRecord){
+    saveDeckToStorage(qaPractice.deckRecord).then(refreshBrowseView).catch(err=>{
+      console.error(err);
+      setStatus('セットの保存に失敗しました：' + (err && err.message ? err.message : '不明なエラー'), true);
+    });
+  }else if(qaPractice.shots === shots){
+    renderThumbs();
+  }
+}
+
+/* ---------- 並び替えの保存ボタン(押すまでは保存されない) ---------- */
+function updateQaSaveOrderBtn(){
+  qaSaveOrderBtn.disabled = !qaOrderDirty;
+  qaSaveOrderBtn.classList.toggle('dirty', qaOrderDirty);
+}
+
+qaSaveOrderBtn.addEventListener('click', async ()=>{
+  if(!qaPractice.deckRecord || !qaOrderDirty) return;
+  qaSaveOrderBtn.disabled = true;
+  try{
+    await saveDeckToStorage(qaPractice.deckRecord);
+    qaOrderDirty = false;
+    updateQaSaveOrderBtn();
+    await refreshBrowseView();
+    setStatus('並び替えを保存しました');
+  }catch(e){
+    console.error(e);
+    setStatus('保存に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+    updateQaSaveOrderBtn();
+  }
+});
+
+// 今のフィルターに当てはまるカードの「元の配列での位置」の一覧を返す
+function getQaFilteredIndices(){
+  return qaPractice.shots
+    .map((s, i)=> i)
+    .filter(i=>{
+      const s = qaPractice.shots[i];
+      if(qaFilter === 'all') return true;
+      return s.memLevel === Number(qaFilter);
+    });
+}
+
+function setQaModeButtons(){
+  qaModeOneBtn.classList.toggle('active', qaMode === 'one');
+  qaModeListBtn.classList.toggle('active', qaMode === 'list');
+}
+function setQaFilterButtons(){
+  qaFilterAllBtn.classList.toggle('active', qaFilter === 'all');
+  qaFilterUnBtn.classList.toggle('active', qaFilter === '0');
+  qaFilterMidBtn.classList.toggle('active', qaFilter === '1');
+  qaFilterMemBtn.classList.toggle('active', qaFilter === '2');
+}
+
+function updateQaCounts(){
+  qaAllNum.textContent = qaPractice.shots.length;
+  qaMemNum.textContent = qaPractice.shots.filter(s => s.memLevel === 2).length;
+}
+
+/* ---------- 練習画面全体の描画（1枚ずつ／一覧、共通の入り口） ---------- */
+function renderQaAll(){
+  updateQaCounts();
+  const filtered = getQaFilteredIndices();
+
+  if(filtered.length === 0){
+    qaOneWrap.style.display = 'none';
+    qaList.style.display = 'none';
+    qaEmptyFilter.style.display = 'block';
+    return;
+  }
+  qaEmptyFilter.style.display = 'none';
+  if(qaCursor >= filtered.length) qaCursor = filtered.length - 1;
+  if(qaCursor < 0) qaCursor = 0;
+
+  if(qaMode === 'one'){
+    qaOneWrap.style.display = 'block';
+    qaList.style.display = 'none';
+    renderQaCard(filtered);
+  }else{
+    qaOneWrap.style.display = 'none';
+    qaList.style.display = 'flex';
+    renderQaList(filtered);
+  }
+}
+
+/* ---------- 1枚ずつ表示モード ---------- */
+function renderQaCard(filtered){
+  const masterIdx = filtered[qaCursor];
+  const shot = qaPractice.shots[masterIdx];
+  qaCardWrap.dataset.masterIdx = masterIdx;
+  qaCardImg.src = shot.dataUrl;
+  qaIndexNum.textContent = qaCursor + 1;
+  qaTotalNum.textContent = filtered.length;
+  qaRevealed = false;
+  applyQaMaskVisibility(shot);
+  qaCardNumBadge.textContent = '#' + (masterIdx + 1);
+  qaMemBtn.textContent = '暗記度：' + MEM_LEVEL_LABELS[shot.memLevel] + '（タップで切替）';
+  qaMemBtn.classList.remove('active', 'mem-lvl-1');
+  if(shot.memLevel === 2) qaMemBtn.classList.add('active');
+  else if(shot.memLevel === 1) qaMemBtn.classList.add('mem-lvl-1');
+}
+
+// 隠す範囲(qaMaskTop等)の大きさを切り替える。
+// 写真ごとに記録された設定(shot.mask)があればそれを優先し、
+// 無い場合(古い形式で保存したセットなど)はセット全体の設定を使う
+function applyQaMaskVisibility(shot){
+  const m = (shot && shot.mask) || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
+  [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{
+    el.style.display = qaRevealed ? 'none' : 'block';
+  });
+  qaMaskTop.style.height = m.top + '%';
+  qaMaskBottom.style.height = m.bottom + '%';
+  qaMaskLeft.style.width = m.left + '%';
+  qaMaskRight.style.width = m.right + '%';
+
+  // ヒントは、答え(隠していた部分)を表示するのと一緒にカードの下へ展開する
+  const hasHint = shot && shot.hint;
+  qaHintBox.textContent = hasHint ? ('ヒント：' + shot.hint) : '';
+  qaHintBox.classList.toggle('show', qaRevealed && !!hasHint);
+}
+
+qaCardWrap.addEventListener('click', (e)=>{
+  if(e.target.closest('.qa-card-actions')) return;
+  qaRevealed = !qaRevealed;
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  applyQaMaskVisibility(qaPractice.shots[masterIdx]);
+});
+
+qaHintBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  const shot = qaPractice.shots[masterIdx];
+  const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+  if(val === null) return;
+  shot.hint = val.trim();
+  afterQaMutation();
+  renderQaAll();
+});
+
+qaMemBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  const shot = qaPractice.shots[masterIdx];
+  shot.memLevel = (shot.memLevel + 1) % 3;
+  afterQaMutation();
+  renderQaAll();
+});
+
+qaDelBtn.addEventListener('click', ()=>{
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  if(!confirm('このカードを削除します。よろしいですか？')) return;
+  qaPractice.shots.splice(masterIdx, 1);
+  afterQaMutation();
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
+});
+
+qaViewBtn.addEventListener('click', ()=> openQaViewer());
+
+qaPrevBtn.addEventListener('click', ()=>{
+  const filtered = getQaFilteredIndices();
+  if(filtered.length === 0) return;
+  qaCursor = (qaCursor - 1 + filtered.length) % filtered.length;
+  renderQaAll();
+});
+qaNextBtn.addEventListener('click', ()=>{
+  const filtered = getQaFilteredIndices();
+  if(filtered.length === 0) return;
+  qaCursor = (qaCursor + 1) % filtered.length;
+  renderQaAll();
+});
+qaCloseBtn.addEventListener('click', ()=>{
+  if(qaOrderDirty){
+    if(!confirm('並び替えをまだ保存していません。保存せずに閉じると、次に開いたときは元の順番に戻ります。閉じますか？')) return;
+  }
+  qaOrderDirty = false;
+  qaViewer.style.display = 'none';
+  clearInterval(swTimer);
+  swTimer = null;
+});
+
+/* ---------- カード選択モード(一覧表示で、複数カードをまとめて削除／移動) ---------- */
+qaSelectModeBtn.addEventListener('click', ()=>{
+  qaSelectMode = !qaSelectMode;
+  qaSelectModeBtn.classList.toggle('active', qaSelectMode);
+  qaBulkBar.classList.toggle('active', qaSelectMode);
+  qaSelectedIds = new Set();
+  if(qaSelectMode && qaMode !== 'list'){
+    qaMode = 'list';
+    setQaModeButtons();
+  }
+  renderQaAll();
+});
+
+qaBulkSelectAllBtn.addEventListener('click', ()=>{
+  const filtered = getQaFilteredIndices();
+  qaSelectedIds = new Set(filtered.map(i => qaPractice.shots[i].id));
+  renderQaAll();
+});
+qaBulkSelectNoneBtn.addEventListener('click', ()=>{
+  qaSelectedIds = new Set();
+  renderQaAll();
+});
+qaBulkRotateBtn.addEventListener('click', async ()=>{
+  if(qaSelectedIds.size === 0) return;
+  const targets = qaPractice.shots.filter(s => qaSelectedIds.has(s.id));
+  qaBulkRotateBtn.disabled = true;
+  setStatus('回転しています…');
+  try{
+    await rotateShots(targets);
+    afterQaMutation();
+    renderQaAll();
+    setStatus('選んだカードを90度回転しました');
+  }finally{
+    qaBulkRotateBtn.disabled = false;
+  }
+});
+
+qaBulkDeleteBtn.addEventListener('click', ()=>{
+  if(qaSelectedIds.size === 0) return;
+  if(!confirm('選んだ' + qaSelectedIds.size + '枚のカードを削除します。よろしいですか？')) return;
+  qaPractice.shots = qaPractice.shots.filter(s => !qaSelectedIds.has(s.id));
+  qaSelectedIds = new Set();
+  afterQaMutation();
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
+  setStatus('選んだカードを削除しました');
+});
+
+qaBulkMoveBtn.addEventListener('click', async ()=>{
+  if(qaSelectedIds.size === 0) return;
+  const excludeName = qaPractice.deckRecord ? qaPractice.deckRecord.name : null;
+  const options = await deckPickOptions(excludeName);
+  options.push({ label:'＋新しいセットとして保存', value:'__new__' });
+  const target = await pickFromList('移動先のセットを選んでください', options);
+  if(target === null) return;
+
+  const moving = qaPractice.shots.filter(s => qaSelectedIds.has(s.id));
+
+  if(target === '__new__'){
+    const name = prompt('新しいセットの名前を入力してください', '');
+    if(!name) return;
+    const folder = await pickFromList('保存先のフォルダを選んでください', await folderPickOptions());
+    if(folder === null) return;
+    await saveDeckToStorage({ name: name, folder: folder, shots: moving });
+  }else{
+    const list = await loadDecks();
+    const targetDeck = list.find(d => d.name === target);
+    if(!targetDeck) return;
+    targetDeck.shots = targetDeck.shots.concat(moving);
+    await saveDeckToStorage(targetDeck);
+  }
+
+  qaPractice.shots = qaPractice.shots.filter(s => !qaSelectedIds.has(s.id));
+  qaSelectedIds = new Set();
+  afterQaMutation();
+  setStatus('選んだカードを移動しました');
+  if(qaPractice.shots.length === 0){
+    qaViewer.style.display = 'none';
+    return;
+  }
+  renderQaAll();
+});
+
+/* ---------- モード切り替え(1枚ずつ／一覧) ---------- */
+qaModeOneBtn.addEventListener('click', ()=>{
+  qaMode = 'one';
+  setQaModeButtons();
+  renderQaAll();
+});
+qaModeListBtn.addEventListener('click', ()=>{
+  qaMode = 'list';
+  setQaModeButtons();
+  renderQaAll();
+});
+
+/* ---------- フィルター切り替え(全部／未暗記／暗記済み) ---------- */
+[qaFilterAllBtn, qaFilterUnBtn, qaFilterMidBtn, qaFilterMemBtn].forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    qaFilter = btn.dataset.filter;
+    setQaFilterButtons();
+    qaCursor = 0;
+    renderQaAll();
+  });
+});
+
+/* ---------- シャッフル(練習画面内) ---------- */
+qaShuffleBtn.addEventListener('click', ()=>{
+  if(qaPractice.shots.length < 2) return;
+  const arr = qaPractice.shots;
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  qaCursor = 0;
+  afterQaMutation();
+  renderQaAll();
+  setStatus('カードの順番をシャッフルしました');
+});
+
+/* ---------- 一覧表示モード(縦にバーッと並べる) ----------
+   各カードをタップすると、そのカードだけ答えの表示/非表示が切り替わる。
+   カードを長押ししてそのままドラッグすると、好きな位置に並べ替えられる
+   （この並び順は1枚ずつ表示モードにもそのまま反映される） */
+function renderQaList(filtered){
+  qaList.innerHTML = '';
+
+  filtered.forEach((masterIdx, i)=>{
+    const shot = qaPractice.shots[masterIdx];
+
+    const item = document.createElement('div');
+    item.className = 'qa-list-item mem-lvl-' + shot.memLevel + (qaSelectMode ? ' select-mode' : '') + (qaSelectedIds.has(shot.id) ? ' selected' : '');
+    item.dataset.masterIdx = masterIdx;
+
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'qa-list-imgwrap';
+    const img = document.createElement('img');
+    img.src = shot.dataUrl;
+    imgWrap.appendChild(img);
+
+    const check = document.createElement('div');
+    check.className = 'select-check';
+    imgWrap.appendChild(check);
+
+    const badge = document.createElement('div');
+    badge.className = 'qa-list-badge';
+    badge.textContent = MEM_LEVEL_LABELS[shot.memLevel];
+    imgWrap.appendChild(badge);
+
+    const numBadge = document.createElement('div');
+    numBadge.className = 'qa-num-badge';
+    numBadge.textContent = '#' + (i + 1);
+    imgWrap.appendChild(numBadge);
+
+    const m = shot.mask || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
+    const revealed = qaListRevealed.has(shot.id);
+    const sideStyle = {
+      top:    { top:'0', left:'0', right:'0', height:m.top + '%' },
+      bottom: { bottom:'0', left:'0', right:'0', height:m.bottom + '%' },
+      left:   { top:'0', bottom:'0', left:'0', width:m.left + '%' },
+      right:  { top:'0', bottom:'0', right:'0', width:m.right + '%' }
+    };
+    Object.keys(sideStyle).forEach(side=>{
+      const maskEl = document.createElement('div');
+      maskEl.className = 'qa-list-mask';
+      Object.assign(maskEl.style, sideStyle[side]);
+      maskEl.style.display = revealed ? 'none' : 'block';
+      imgWrap.appendChild(maskEl);
+    });
+
+    imgWrap.addEventListener('click', ()=>{
+      if(qaSelectMode){
+        if(qaSelectedIds.has(shot.id)) qaSelectedIds.delete(shot.id);
+        else qaSelectedIds.add(shot.id);
+        renderQaAll();
+        return;
+      }
+      if(qaListRevealed.has(shot.id)) qaListRevealed.delete(shot.id);
+      else qaListRevealed.add(shot.id);
+      renderQaAll();
+    });
+
+    // ヒントは、答えを開いているカードの下に一緒に展開する
+    const hintBox = document.createElement('div');
+    hintBox.className = 'hint-box' + ((revealed && shot.hint) ? ' show' : '');
+    hintBox.textContent = shot.hint ? ('ヒント：' + shot.hint) : '';
+
+    const actions = document.createElement('div');
+    actions.className = 'qa-list-actions';
+
+    const hintBtn = document.createElement('button');
+    hintBtn.textContent = 'ヒント';
+    hintBtn.addEventListener('click', ()=>{
+      const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+      if(val === null) return;
+      shot.hint = val.trim();
+      afterQaMutation();
+      renderQaAll();
+    });
+
+    const memBtn = document.createElement('button');
+    memBtn.textContent = '暗記度：' + MEM_LEVEL_LABELS[shot.memLevel];
+    if(shot.memLevel === 2) memBtn.classList.add('active');
+    else if(shot.memLevel === 1) memBtn.classList.add('mem-lvl-1');
+    memBtn.addEventListener('click', ()=>{
+      shot.memLevel = (shot.memLevel + 1) % 3;
+      afterQaMutation();
+      renderQaAll();
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'qa-list-del';
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', ()=>{
+      if(!confirm('このカードを削除します。よろしいですか？')) return;
+      const idx = qaPractice.shots.indexOf(shot);
+      if(idx >= 0) qaPractice.shots.splice(idx, 1);
+      afterQaMutation();
+      if(qaPractice.shots.length === 0){
+        qaViewer.style.display = 'none';
+        return;
+      }
+      renderQaAll();
+    });
+
+    actions.appendChild(hintBtn);
+    actions.appendChild(memBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(imgWrap);
+    item.appendChild(hintBox);
+    item.appendChild(actions);
+
+    attachQaDragHandlers(item);
+    qaList.appendChild(item);
+  });
+}
+
+/* ---------- 一覧表示モードの並べ替え(長押し→ドラッグ) ----------
+   仕組みはサムネイル一覧の並べ替えと同じ。ただし対象がqaPractice.shots
+   （元の配列上の位置=masterIdx）である点が異なる */
+let qaDragFromIdx = null;
+let qaDragTimer = null;
+let qaDragGhost = null;
+let qaDragStartX = 0, qaDragStartY = 0;
+
+function attachQaDragHandlers(item){
+  item.addEventListener('pointerdown', (e)=>{
+    if(e.target.closest('.qa-list-actions')) return;
+    if(qaSelectMode) return; // 選択モード中はドラッグ並べ替えを無効にする
+    qaDragStartX = e.clientX;
+    qaDragStartY = e.clientY;
+    const idx = Number(item.dataset.masterIdx);
+    clearTimeout(qaDragTimer);
+    qaDragTimer = setTimeout(()=> startQaDrag(item, idx, e.clientX, e.clientY), 320);
+  });
+  item.addEventListener('pointermove', (e)=>{
+    if(qaDragFromIdx === null){
+      if(Math.abs(e.clientX - qaDragStartX) > 10 || Math.abs(e.clientY - qaDragStartY) > 10){
+        clearTimeout(qaDragTimer);
+      }
+    }
+  });
+  item.addEventListener('pointerup', ()=> clearTimeout(qaDragTimer));
+  item.addEventListener('pointercancel', ()=> clearTimeout(qaDragTimer));
+}
+
+function startQaDrag(item, idx, x, y){
+  qaDragFromIdx = idx;
+  if(navigator.vibrate) navigator.vibrate(20);
+
+  qaDragGhost = item.cloneNode(true);
+  qaDragGhost.classList.add('drag-ghost');
+  qaDragGhost.style.width = item.getBoundingClientRect().width + 'px';
+  document.body.appendChild(qaDragGhost);
+  moveQaGhost(x, y);
+}
+
+function moveQaGhost(x, y){
+  if(qaDragGhost){
+    qaDragGhost.style.left = x + 'px';
+    qaDragGhost.style.top = y + 'px';
+  }
+}
+
+function endQaDrag(){
+  clearTimeout(qaDragTimer);
+  if(qaDragGhost){ qaDragGhost.remove(); qaDragGhost = null; }
+  if(qaDragFromIdx !== null){
+    // 保存済みセットの並べ替えは、ここでは自動保存せず「並び替えを保存」ボタンを
+    // 押すまで保留にする。押さないままリロードすると元の順番に戻る
+    if(qaPractice.deckRecord){
+      qaOrderDirty = true;
+      updateQaSaveOrderBtn();
+    }else{
+      afterQaMutation();
+    }
+  }
+  qaDragFromIdx = null;
+}
+
+document.addEventListener('pointermove', (e)=>{
+  if(qaDragFromIdx === null) return;
+  e.preventDefault();
+  moveQaGhost(e.clientX, e.clientY);
+  const overEl = document.elementFromPoint(e.clientX, e.clientY);
+  const overItem = overEl && overEl.closest('.qa-list-item');
+  if(overItem){
+    const overIdx = Number(overItem.dataset.masterIdx);
+    if(!Number.isNaN(overIdx) && overIdx !== qaDragFromIdx){
+      const [moved] = qaPractice.shots.splice(qaDragFromIdx, 1);
+      qaPractice.shots.splice(overIdx, 0, moved);
+      qaDragFromIdx = overIdx;
+      renderQaAll();
+    }
+  }
+}, { passive:false });
+
+document.addEventListener('pointerup', endQaDrag);
+document.addEventListener('pointercancel', endQaDrag);
+
+/* ---------- 枠の向き切り替え(横向き/縦向き) ----------
+   縦向きにすると、CSS側で同じサイズの数値の width/height を
+   入れ替えたスタイル(#frame.vertical.size-xxx)が適用される */
+document.querySelectorAll('.btn-toggle[data-orient]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.btn-toggle[data-orient]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    frameEl.classList.toggle('vertical', btn.dataset.orient === 'vertical');
+  });
+});
+
+/* ---------- カメラ起動 ---------- */
+async function startCamera(){
+  setStatus('カメラを起動しています…');
+  // すでに映像が出ていたら一旦止める(カメラ切替のときのため)
+  if(currentStream){
+    currentStream.getTracks().forEach(t=>t.stop());
+  }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{
+        facingMode: { ideal: facingMode },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+    currentStream = stream;
+    currentTrack = stream.getVideoTracks()[0];
+    video.srcObject = stream;
+    shootBtn.disabled = false;
+    setupZoom();
+    setStatus('');
+  }catch(err){
+    console.error(err);
+    setStatus('カメラを起動できませんでした。ブラウザのカメラ許可設定を確認してください。', true);
+  }
+}
+
+/* ---------- ズームの準備 ----------
+   端末・ブラウザが「ハードウェアズーム」に対応していればそれを使う。
+   対応していない場合（iPadのSafariなど多くはこちら）は、
+   映像そのものをCSSで拡大表示する「疑似ズーム」に切り替える。
+   ※撮影の切り取り計算は画面上の実際の見た目のサイズを元に
+     行っているので、どちらの方式でも撮影結果は正しく切り取られる。
+*/
+function setupZoom(){
+  video.style.transform = 'scale(1)'; // 前回の拡大表示をリセット
+  zoomSlider.value = 1;
+  zoomValEl.textContent = '1.0x';
+
+  const caps = currentTrack.getCapabilities ? currentTrack.getCapabilities() : {};
+  if(caps.zoom){
+    zoomMode = 'hardware';
+    zoomSlider.min = caps.zoom.min;
+    zoomSlider.max = caps.zoom.max;
+    zoomSlider.step = caps.zoom.step || 0.1;
+    zoomSlider.value = caps.zoom.min;
+  }else{
+    zoomMode = 'css';
+    zoomSlider.min = 1;
+    zoomSlider.max = 3;
+    zoomSlider.step = 0.02;
+    zoomSlider.value = 1;
+  }
+}
+
+zoomSlider.addEventListener('input', ()=>{
+  const val = parseFloat(zoomSlider.value);
+  zoomValEl.textContent = val.toFixed(1) + 'x';
+
+  if(zoomMode === 'hardware'){
+    currentTrack.applyConstraints({ advanced: [{ zoom: val }] }).catch(err=>{
+      console.error(err);
+      setStatus('ズームの適用に失敗しました', true);
+    });
+  }else{
+    // 映像自体を拡大する疑似ズーム(中心を基準に拡大)
+    video.style.transform = 'scale(' + val + ')';
+  }
+});
+
+startBtn.addEventListener('click', startCamera);
+
+flipBtn.addEventListener('click', ()=>{
+  facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+  startCamera();
+});
+
+/* ---------- 撮影処理 ----------
+   ポイント：ネイティブのカメラ機能(input capture等)を使わず、
+   映像(video)から直接canvasに描き写しているだけなので
+   シャッター音は鳴りません。
+*/
+shootBtn.addEventListener('click', ()=>{
+  if(!video.videoWidth){
+    setStatus('カメラの準備がまだできていません。少し待ってから押してください。', true);
+    return;
+  }
+
+  // 1) 画面上の「枠」と「映像」の位置・大きさ(px)を取得
+  const videoRect = video.getBoundingClientRect();
+  const frameRect = frameEl.getBoundingClientRect();
+
+  // 2) video要素はCSSで object-fit:cover にしているため、
+  //    実際の映像(videoWidth x videoHeight)は画面表示より
+  //    拡大されて中央が切り取られた状態で見えている。
+  //    その拡大率(scale)とズレ(offset)を計算する。
+  const scale = Math.max(
+    videoRect.width  / video.videoWidth,
+    videoRect.height / video.videoHeight
+  );
+  const renderedW = video.videoWidth  * scale;
+  const renderedH = video.videoHeight * scale;
+  const offsetX = (renderedW - videoRect.width)  / 2;
+  const offsetY = (renderedH - videoRect.height) / 2;
+
+  // 3) 画面上の枠の位置を「実際の映像の中の座標(px)」に変換
+  const frameLeftOnVideo = (frameRect.left - videoRect.left) + offsetX;
+  const frameTopOnVideo  = (frameRect.top  - videoRect.top)  + offsetY;
+
+  const srcX = frameLeftOnVideo / scale;
+  const srcY = frameTopOnVideo  / scale;
+  const srcW = frameRect.width  / scale;
+  const srcH = frameRect.height / scale;
+
+  // 4) その部分だけをcanvasに切り取って描画
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.round(srcW);
+  canvas.height = Math.round(srcH);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  // PDF作成時に読み直さなくていいよう、幅と高さもこの時点で保存しておく
+  shots.push({
+    dataUrl: dataUrl, width: canvas.width, height: canvas.height,
+    // 撮影した瞬間の「隠す範囲」をこの1枚ごとに記録しておく。
+    // こうしておくと、途中で隠す位置(上下左右)を変えても、
+    // 前に撮った写真の設定は変わらずそのまま残る
+    mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
+    id: makeShotId(),       // 並べ替え・削除・暗記済み管理のためのID
+    memLevel: 0,            // 暗記度(0=未暗記/1=うろ覚え/2=暗記済み)
+    hint: ''                // ヒント(あとから編集可能)
+  });
+  renderThumbs();
+  showCaptureSignal();
+  setStatus('撮影しました（合計' + shots.length + '枚）');
+});
+
+/* ---------- 撮れたことを知らせる合図 ----------
+   音を鳴らさない方針なので、代わりに
+   ・画面を一瞬白く光らせる
+   ・枠を一瞬白くする
+   ・対応端末なら軽く振動させる(navigator.vibrate。音ではないのでシャッター音の
+     方針とは矛盾しない。対応していない端末では単に何も起きないだけ)
+   の3つで「撮れたこと」がわかるようにしている。
+*/
+function showCaptureSignal(){
+  // クラスを一度外してから付け直すことで、連続撮影時にもアニメーションを
+  // 毎回最初から再生できるようにしている
+  flashEl.classList.remove('active');
+  frameEl.classList.remove('captured');
+  void flashEl.offsetWidth; // 強制的に再描画させるおまじない
+  flashEl.classList.add('active');
+  frameEl.classList.add('captured');
+
+  setTimeout(()=>{
+    frameEl.classList.remove('captured');
+  }, 280);
+
+  if(navigator.vibrate){
+    navigator.vibrate(60);
+  }
+}
+
+/* ---------- サムネイルの並べ替え(長押し→ドラッグ) ----------
+   ボタンではなく、カードを指で長押ししてそのまま動かすと
+   好きな位置に並べ替えられる。軽いタップやページのスクロールと
+   区別するため、触れてから約0.3秒動かなければ「ドラッグ開始」とみなす。
+   並べ替えるたびにサムネイル一覧を作り直す(renderThumbs)ので、
+   移動・指を離す判定は個々のカードではなくdocument全体で行っている */
+let dragFromIdx = null;   // 今ドラッグ中の写真の位置(ドラッグ中でなければnull)
+let dragTimer = null;     // 長押し判定用のタイマー
+let dragGhost = null;     // 指に追従する分身のカード
+let dragStartX = 0, dragStartY = 0;
+
+function attachThumbDragHandlers(box){
+  box.addEventListener('pointerdown', (e)=>{
+    if(e.target.closest('.del')) return; // ×ボタンの上では発動させない
+    if(e.target.closest('.hint-btn')) return; // ヒントボタンの上でも発動させない
+    if(selectMode) return; // 選択モード中はドラッグ並べ替えを無効にする
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    const idx = Number(box.dataset.idx);
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(()=> startThumbDrag(box, idx, e.clientX, e.clientY), 320);
+  });
+  box.addEventListener('pointermove', (e)=>{
+    // ドラッグが始まる前に大きく動いたら、スクロールしたいだけとみなして
+    // 長押し判定をキャンセルする(ページが動かせなくなるのを防ぐ)
+    if(dragFromIdx === null){
+      if(Math.abs(e.clientX - dragStartX) > 10 || Math.abs(e.clientY - dragStartY) > 10){
+        clearTimeout(dragTimer);
+      }
+    }
+  });
+  box.addEventListener('pointerup', ()=> clearTimeout(dragTimer));
+  box.addEventListener('pointercancel', ()=> clearTimeout(dragTimer));
+}
+
+function startThumbDrag(box, idx, x, y){
+  dragFromIdx = idx;
+  if(navigator.vibrate) navigator.vibrate(20);
+
+  dragGhost = box.cloneNode(true);
+  dragGhost.classList.add('drag-ghost');
+  dragGhost.style.width = box.getBoundingClientRect().width + 'px';
+  document.body.appendChild(dragGhost);
+  moveThumbGhost(x, y);
+}
+
+function moveThumbGhost(x, y){
+  if(dragGhost){
+    dragGhost.style.left = x + 'px';
+    dragGhost.style.top = y + 'px';
+  }
+}
+
+function endThumbDrag(){
+  clearTimeout(dragTimer);
+  if(dragGhost){ dragGhost.remove(); dragGhost = null; }
+  dragFromIdx = null;
+}
+
+document.addEventListener('pointermove', (e)=>{
+  if(dragFromIdx === null) return;
+  e.preventDefault(); // ドラッグ中はページがスクロールしないようにする
+  moveThumbGhost(e.clientX, e.clientY);
+  const overEl = document.elementFromPoint(e.clientX, e.clientY);
+  const overThumb = overEl && overEl.closest('.thumb');
+  if(overThumb){
+    const overIdx = Number(overThumb.dataset.idx);
+    if(!Number.isNaN(overIdx) && overIdx !== dragFromIdx){
+      const [moved] = shots.splice(dragFromIdx, 1);
+      shots.splice(overIdx, 0, moved);
+      dragFromIdx = overIdx;
+      renderThumbs();
+    }
+  }
+}, { passive:false });
+
+document.addEventListener('pointerup', endThumbDrag);
+document.addEventListener('pointercancel', endThumbDrag);
+
+/* ---------- カード選択モード(今の写真を、まとめて削除／別セットへ移動) ---------- */
+let selectMode = false;
+let selectedShotIds = new Set();
+
+selectModeBtn.addEventListener('click', ()=>{
+  selectMode = !selectMode;
+  selectModeBtn.classList.toggle('active', selectMode);
+  bulkBar.classList.toggle('active', selectMode);
+  selectedShotIds = new Set();
+  renderThumbs();
+});
+
+bulkSelectAllBtn.addEventListener('click', ()=>{
+  selectedShotIds = new Set(shots.map(s => s.id));
+  renderThumbs();
+});
+bulkSelectNoneBtn.addEventListener('click', ()=>{
+  selectedShotIds = new Set();
+  renderThumbs();
+});
+bulkRotateBtn.addEventListener('click', async ()=>{
+  if(selectedShotIds.size === 0) return;
+  const targets = shots.filter(s => selectedShotIds.has(s.id));
+  bulkRotateBtn.disabled = true;
+  setStatus('回転しています…');
+  try{
+    await rotateShots(targets);
+    renderThumbs();
+    setStatus('選んだカードを90度回転しました');
+  }finally{
+    bulkRotateBtn.disabled = false;
+  }
+});
+
+bulkDeleteBtn.addEventListener('click', ()=>{
+  if(selectedShotIds.size === 0) return;
+  if(!confirm('選んだ' + selectedShotIds.size + '枚のカードを削除します。よろしいですか？')) return;
+  shots = shots.filter(s => !selectedShotIds.has(s.id));
+  selectedShotIds = new Set();
+  renderThumbs();
+  setStatus('選んだカードを削除しました');
+});
+
+bulkMoveBtn.addEventListener('click', async ()=>{
+  if(selectedShotIds.size === 0) return;
+  const options = await deckPickOptions(null);
+  options.push({ label:'＋新しいセットとして保存', value:'__new__' });
+  const target = await pickFromList('移動先のセットを選んでください', options);
+  if(target === null) return;
+
+  const moving = shots.filter(s => selectedShotIds.has(s.id));
+
+  if(target === '__new__'){
+    const name = prompt('新しいセットの名前を入力してください', '');
+    if(!name) return;
+    const folder = await pickFromList('保存先のフォルダを選んでください', await folderPickOptions());
+    if(folder === null) return;
+    await saveDeckToStorage({ name: name, folder: folder, shots: moving });
+  }else{
+    const list = await loadDecks();
+    const targetDeck = list.find(d => d.name === target);
+    if(!targetDeck) return;
+    targetDeck.shots = targetDeck.shots.concat(moving);
+    await saveDeckToStorage(targetDeck);
+  }
+
+  shots = shots.filter(s => !selectedShotIds.has(s.id));
+  selectedShotIds = new Set();
+  await refreshBrowseView();
+  renderThumbs();
+  setStatus('選んだカードを移動しました');
+});
+
+/* ---------- サムネイル表示 ---------- */
+function renderThumbs(){
+  thumbsEl.innerHTML = '';
+  emptyNoteEl.style.display = shots.length ? 'none' : 'block';
+
+  shots.forEach((shot, idx)=>{
+    const box = document.createElement('div');
+    box.className = 'thumb' + (selectMode ? ' select-mode' : '') + (selectedShotIds.has(shot.id) ? ' selected' : '');
+    box.dataset.idx = idx;
+
+    const img = document.createElement('img');
+    img.src = shot.dataUrl;
+    box.appendChild(img);
+
+    const check = document.createElement('div');
+    check.className = 'select-check';
+    box.appendChild(check);
+
+    const hintBtn = document.createElement('button');
+    hintBtn.className = 'hint-btn';
+    hintBtn.textContent = shot.hint ? 'H済' : 'H';
+    hintBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const val = prompt('ヒントを入力してください（空欄にすると削除されます）', shot.hint || '');
+      if(val === null) return;
+      shot.hint = val.trim();
+      renderThumbs();
+    });
+    box.appendChild(hintBtn);
+
+    box.addEventListener('click', ()=>{
+      if(!selectMode) return;
+      if(selectedShotIds.has(shot.id)) selectedShotIds.delete(shot.id);
+      else selectedShotIds.add(shot.id);
+      renderThumbs();
+    });
+
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '×';
+    del.addEventListener('click', ()=>{
+      shots.splice(idx,1);
+      renderThumbs();
+    });
+    box.appendChild(del);
+
+    // ---- 並べ替え：カードを長押ししてそのままドラッグすると順番を入れ替えられる ----
+    attachThumbDragHandlers(box);
+
+    thumbsEl.appendChild(box);
+  });
+
+  countNumEl.textContent = shots.length;
+  shootBtn.disabled = !currentStream; // 撮影枚数の上限は撤廃したので、カメラが起動していれば撮影可能
+  pdfBtn.disabled = shots.length === 0;
+  zipBtn.disabled = shots.length === 0;
+  qaViewBtn.disabled = shots.length === 0;
+  saveDeckBtn.disabled = shots.length === 0;
+  // 練習画面が「今の写真」を見ている最中(＝保存済みセットではない)場合だけ、
+  // 撮影し直して枚数が変わったことを画面にも反映する
   if(qaViewer.style.display === 'block' && qaPractice.shots === shots){
+    if(shots.length === 0){
+      qaViewer.style.display = 'none';
+    }else{
+      renderQaAll();
+    }
+  }
+}
+
+/* ---------- 並び順をランダムにする ----------
+   Fisher-Yatesシャッフルという定番のやり方で、配列の中身を
+   偏りなくランダムに並べ替えている */
+shuffleBtn.addEventListener('click', ()=>{
+  if(shots.length < 2) return;
+  for(let i = shots.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [shots[i], shots[j]] = [shots[j], shots[i]];
+  }
+  renderThumbs();
+  setStatus('並び順をランダムにしました');
+});
+
+/* ---------- 全部リセット ---------- */
+resetBtn.addEventListener('click', ()=>{
+  if(shots.length === 0) return;
+  if(confirm('撮影した' + shots.length + '枚をすべて削除します。よろしいですか？')){
+    shots = [];
+    renderThumbs();
+    setStatus('リセットしました');
+  }
+});
+
+/* ---------- PDF作成 ----------
+   単語カードを、ページの上から下へ順番に並べていきます。
+   入りきらなくなったら自動で次のページに移ります。
+   列数(1〜8)は「列数」のステッパーで自由に選べます。
+*/
+function buildAndDownloadPdf(filename){
+  if(shots.length === 0) return false;
+
+  if(!(window.jspdf && window.jspdf.jsPDF)){
+    setStatus('PDF機能の読み込みに失敗しました。電波の良い場所でもう一度ボタンを押してみてください。', true);
+    ensureJsPDF();
+    return false;
+  }
+
+  try{
+    const { jsPDF } = window.jspdf;
+    const size = pageSizeSel.value; // 'a4' or 'a5'
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: size
+    });
+
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 4;         // 外側の余白(mm)。より詰めて1枚に多く入るようにしている
+    const gap = 1.5;          // 縦方向のカード同士の間隔(mm)
+    const columnGap = 1.5;    // 列と列の間隔(mm)
+    const columns = Math.max(1, Math.min(8, parseInt(layoutColsSel.value, 10) || 1));
+
+    const usableW = pageW - margin*2;
+    const colW = (usableW - columnGap*(columns-1)) / columns;
+
+    let cursorY = margin;
+
+    // shotsをcolumns個ずつの「行」に分けて、行ごとに高さをそろえて並べる
+    for(let i=0; i<shots.length; i += columns){
+      const rowItems = shots.slice(i, i + columns);
+      const rowHeights = rowItems.map(s => colW * (s.height / s.width));
+      const rowH = Math.max(...rowHeights);
+
+      // ページに入りきらなければ新しいページへ
+      if(cursorY + rowH > pageH - margin){
+        doc.addPage();
+        cursorY = margin;
+      }
+
+      rowItems.forEach((shot, idx)=>{
+        const x = margin + idx * (colW + columnGap);
+        const h = colW * (shot.height / shot.width);
+        doc.addImage(shot.dataUrl, 'JPEG', x, cursorY, colW, h);
+      });
+
+      cursorY += rowH + gap;
+    }
+
+    doc.save(filename);
+    return true;
+  }catch(err){
+    console.error(err);
+    setStatus('PDFの作成に失敗しました：' + err.message, true);
+    return false;
+  }
+}
+
+pdfBtn.addEventListener('click', ()=>{
+  // 前に途中まで動いて固まっていた原因：処理の途中でawait(非同期の待ち)が
+  // 入っていたため、iOSのSafariが「ボタンを押した操作の続き」とみなさなくなり、
+  // 最後のダウンロードがブロックされていた可能性が高い。
+  // → 画像のサイズは撮影時に保存済みなので、ここでは一切待たずに
+  //    全部その場で(同期処理で)完結させる。
+  pdfBtn.disabled = true;
+  setStatus('PDFを作成しています…');
+  const ok = buildAndDownloadPdf('単語帳.pdf');
+  if(ok) setStatus('PDFをダウンロードしました');
+  // 失敗した場合のエラーメッセージはbuildAndDownloadPdfの中で
+  // すでに表示済みなので、ここで上書きしない
+  pdfBtn.disabled = false;
+});
+
+/* ---------- 画像をまとめてZIPで保存 ----------
+   iPadのSafariは何枚もの画像を一度にダウンロードするのが苦手なため、
+   1つのZIPファイルにまとめてから、1回のダウンロードとして保存する */
+zipBtn.addEventListener('click', async ()=>{
+  if(shots.length === 0) return;
+  zipBtn.disabled = true;
+  setStatus('画像をまとめています…');
+  try{
+    const ok = await ensureJSZip();
+    if(!ok || !window.JSZip){
+      setStatus('ZIP機能の読み込みに失敗しました。電波の良い場所でもう一度試してください。', true);
+      return;
+    }
+    const zip = new JSZip();
+    shots.forEach((shot, idx)=>{
+      // "data:image/jpeg;base64,xxxx" の "xxxx" 部分だけを取り出す
+      const base64 = shot.dataUrl.split(',')[1];
+      const num = String(idx + 1).padStart(3, '0');
+      zip.file('単語' + num + '.jpg', base64, { base64: true });
+    });
+    const blob = await zip.generateAsync({ type:'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '単語帳画像.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 3000);
+    setStatus('画像をZIPで保存しました（' + shots.length + '枚）');
+  }catch(e){
+    console.error(e);
+    setStatus('画像の保存に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }finally{
+    zipBtn.disabled = shots.length === 0;
+  }
+});
+
+/* 初期状態の見た目を整える */
+renderThumbs();
+</script>
+</body>
+</html>
+if(qaViewer.style.display === 'block' && qaPractice.shots === shots){
     if(shots.length === 0){
       qaViewer.style.display = 'none';
     }else{
