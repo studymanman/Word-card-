@@ -33,7 +33,7 @@
   * { box-sizing: border-box; }
   :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  html, body{ height:100%; }
+  html, body{ min-height:100%; }
   body{
     margin:0;
     background:var(--bg);
@@ -247,6 +247,11 @@
     margin-bottom:8px;
   }
   #countLabel b{ color: var(--text); }
+
+  /* 「セットを選択する」ボタンの行(.row)には margin-top しか無く、
+     margin-bottom が無いため、その下に続くセット一覧(#deckListItems)が
+     隙間ゼロでくっついて見えてしまっていた。一覧側に上の余白を持たせて解消 */
+  #deckListItems, #folderListItems{ margin-top:10px; }
 
   #thumbs{
     display:grid;
@@ -480,8 +485,20 @@
     inset:0;
     background:var(--bg);
     z-index:50;
-    padding:16px;
-    padding-bottom:12px;
+    padding:16px 16px 12px;
+    /* 以前はここに overflow-y:auto を付けて中身を全部スクロールさせ、
+       下の操作バー(#qaStickyBar)を position:sticky で常に見えるようにしていた。
+       ただし中身がカメラの画面より短いとき、sticky は「スクロール領域の
+       下端」に貼り付こうとして操作バーを下に引っぱるため、カードと
+       操作バーの間に不自然な空白ができてしまっていた。
+       スクロールする範囲を #qaScrollArea だけに限定し、操作バーは
+       flexで常にその直後にそのまま並べることで、隙間なく・かつ
+       スクロールしなくても常に見える状態にしている */
+    flex-direction:column;
+  }
+  #qaScrollArea{
+    flex:1 1 auto;
+    min-height:0;
     overflow-y:auto;
   }
   #qaCardWrap{
@@ -712,14 +729,15 @@
   }
   .hint-box.show{ display:block; }
 
-  /* ---- 練習画面：スクロールしても常に見える操作バー ---- */
+  /* ---- 練習画面：常に見える操作バー ----
+     以前は position:sticky で下端に貼り付けていたが、中身が短いときに
+     カードとの間に隙間ができる原因になっていた。今はスクロールする
+     範囲(#qaScrollArea)の外側に置かれた、ただのflexの末尾要素なので、
+     スクロールせずに常に見えつつ、中身にぴったりくっついて表示される */
   #qaStickyBar{
-    position:sticky;
-    bottom:0;
-    left:0; right:0;
+    flex-shrink:0;
     background: var(--bg);
     padding:8px 0 4px;
-    margin-top:10px;
     display:flex;
     flex-direction:column;
     gap:8px;
@@ -846,8 +864,14 @@
     left:0; right:0; bottom:0;
     height: calc(var(--tabbar-h) + var(--safe-b));
     padding-bottom: var(--safe-b);
-    background: rgba(18,21,28,0.92);
-    backdrop-filter: blur(10px);
+    /* 以前は半透明+backdrop-filter(ぼかし)にしていたが、iOSのSafariでは
+       固定表示の要素にぼかしを重ねるとスクロール中に再描画が追いつかず、
+       本来と違う位置に「ゴースト」のように映り込むことがあった。
+       ほぼ不透明な単色背景に変え、独自の描画レイヤーを持たせることで
+       カメラ画面などに重なって映り込む不具合を防いでいる */
+    background: #14171f;
+    transform: translateZ(0);
+    will-change: transform;
     border-top:1px solid #262d3a;
     display:flex;
     z-index:40;
@@ -1150,6 +1174,7 @@
      独立した練習用の画面。画像をタップすると隠した部分の
      表示/非表示が切り替わり、前へ/次へで別のカードに移動する -->
 <div id="qaViewer">
+<div id="qaScrollArea">
   <h1 id="qaDeckTitle" style="margin-bottom:2px;">一問一答</h1>
   <div id="qaCountLabel" style="margin-bottom:2px; font-size:14px; color: var(--text-dim);">
     カード <b id="qaIndexNum" style="color:var(--text);">1</b> / <span id="qaTotalNum">1</span>
@@ -1201,6 +1226,7 @@
 
   <div id="qaList"></div>
   <div id="qaEmptyFilter" class="qa-empty-filter">このフィルターに当てはまるカードがありません</div>
+</div><!-- /#qaScrollArea -->
 
   <div id="qaStickyBar">
     <div class="row" id="qaStopwatch">
@@ -2441,7 +2467,7 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
   updateQaSaveOrderBtn();
   setQaModeButtons();
   setQaFilterButtons();
-  qaViewer.style.display = 'block';
+  qaViewer.style.display = 'flex';
   resetStopwatch();
   renderQaAll();
 }
@@ -2674,7 +2700,7 @@ qaCloseBtn.addEventListener('click', ()=>{
    Space/Enter=表裏切り替え、←→=前へ/次へ、1〜3=暗記度を直接指定、Escape=閉じる。
    入力欄(ヒント検索など)にフォーカスがある間は文字入力を優先し、無効にする */
 document.addEventListener('keydown', (e)=>{
-  if(qaViewer.style.display !== 'block') return;
+  if(qaViewer.style.display !== 'flex') return;
   const tag = document.activeElement && document.activeElement.tagName;
   if(tag === 'INPUT' || tag === 'TEXTAREA') return;
 
@@ -2879,6 +2905,17 @@ function renderQaList(filtered){
 
     const imgWrap = document.createElement('div');
     imgWrap.className = 'qa-list-imgwrap';
+    // 縦長の写真(90度回転した単語カードなど)をそのまま幅100%で表示すると
+    // 画面のほぼ全部を1枚が占めてしまい、一覧性が悪くなる。
+    // 「隠す範囲」のマスクは imgWrap の幅を基準に%で位置決めしているので、
+    // object-fit等で余白(レターボックス)を作るとマスクがずれてしまう。
+    // そこで imgWrap 自体の横幅に、縦横比から逆算した上限を付けることで、
+    // 画像は常に「幅いっぱい＝imgWrapの境界」のまま、高さだけを抑える
+    if(shot.width && shot.height){
+      const QA_LIST_MAX_H = 340; // px。1画面に2〜3枚ほど収まる高さが目安
+      imgWrap.style.maxWidth = Math.round(QA_LIST_MAX_H * (shot.width / shot.height)) + 'px';
+      imgWrap.style.margin = '0 auto';
+    }
     const img = document.createElement('img');
     img.src = shot.dataUrl;
     imgWrap.appendChild(img);
@@ -3452,7 +3489,7 @@ function renderThumbs(){
   saveDeckBtn.disabled = shots.length === 0;
   // 練習画面が「今の写真」を見ている最中(＝保存済みセットではない)場合だけ、
   // 撮影し直して枚数が変わったことを画面にも反映する
-  if(qaViewer.style.display === 'block' && qaPractice.shots === shots){
+  if(qaViewer.style.display === 'flex' && qaPractice.shots === shots){
     if(shots.length === 0){
       qaViewer.style.display = 'none';
     }else{
