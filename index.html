@@ -796,10 +796,13 @@
     display:flex;
     gap:6px;
     flex-shrink:0;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    max-width:62%;
   }
   .browse-item .browse-actions button{
-    padding:6px 8px;
-    font-size:12px;
+    padding:8px 10px;
+    font-size:12.5px;
   }
   .browse-item input[type="checkbox"]{
     width:20px; height:20px;
@@ -889,8 +892,56 @@
     padding:6px 2px;
     font-size:10.5px;
   }
-  .tab-btn .tab-ico{ font-size:19px; line-height:1; }
+  .tab-btn .tab-ico{ display:flex; align-items:center; justify-content:center; line-height:1; }
+  .tab-btn .tab-ico svg{ width:22px; height:22px; display:block; }
   .tab-btn.active{ color: var(--accent); }
+
+  /* ---- セット一覧のサムネイル ---- */
+  .browse-thumb{
+    width:40px; height:52px;
+    object-fit:cover;
+    border-radius:6px;
+    flex-shrink:0;
+    background:#000;
+  }
+
+  /* ---- セット検索欄 ---- */
+  .deck-search{
+    width:100%;
+    background:#2a3140;
+    color:var(--text);
+    border:none;
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:14px;
+    font-family:inherit;
+  }
+  .deck-search::placeholder{ color:var(--text-dim); }
+
+  /* ---- 全画面共通のトースト通知 ----
+     #statusは撮影タブの中にあるため、保存済みタブなどで起きた
+     「保存しました」等が今の画面では見えなかった。完了・失敗の
+     メッセージだけを画面下部に浮かせて、どのタブでも気づけるようにする */
+  #toast{
+    position:fixed;
+    left:50%;
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 14px);
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(38,44,56,0.97);
+    color: var(--text);
+    font-size:13.5px;
+    padding:10px 16px;
+    border-radius:12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    max-width: 88vw;
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity .25s ease, transform .25s ease;
+    z-index:120;
+  }
+  #toast.show{ opacity:1; transform: translateX(-50%) translateY(0); }
+  #toast.error{ background: rgba(120,44,40,0.97); }
 
   /* ---- 暗記の進み具合を示す横バー(練習画面の上部) ---- */
   .progress-bar{
@@ -902,7 +953,7 @@
   }
   .progress-bar-fill{
     height:100%;
-    background: linear-gradient(90deg, var(--accent-mid), var(--accent));
+    background: var(--accent);
     transition: width .25s ease;
   }
 
@@ -974,8 +1025,8 @@
          こうすることで、下のパネルがどれだけ増えてもカメラと
          シャッターボタンが同時に見えなくなることがない -->
     <div class="cam-topbar">
-      <button id="startBtn" class="cam-icon-btn">📷 起動</button>
-      <button id="flipBtn" class="cam-icon-btn">🔄 切替</button>
+      <button id="startBtn" class="cam-icon-btn">起動</button>
+      <button id="flipBtn" class="cam-icon-btn">切替</button>
     </div>
     <div class="cam-bottombar">
       <button id="shootBtn" class="cam-shutter" disabled aria-label="撮影する"></button>
@@ -1031,6 +1082,9 @@
   <div class="row">
     <button id="shuffleBtn" class="btn-secondary" style="flex:1">並び順をランダムにする</button>
     <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
+  </div>
+  <div class="row">
+    <button id="goExportBtn" class="btn-main" disabled>この写真でPDFを作る（出力タブへ）</button>
   </div>
   <div id="bulkBar" class="bulk-bar">
     <button id="bulkSelectAllBtn" class="btn-secondary">全部選択</button>
@@ -1118,6 +1172,9 @@
      最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
      その中のセット一覧が表示される（中身は最初は出さない） -->
 <div class="panel">
+  <div class="row" style="margin-top:0; margin-bottom:10px;">
+    <input type="text" id="deckSearchInput" class="deck-search" placeholder="セットの名前で検索…">
+  </div>
   <div id="folderListPanel">
     <div class="sub" style="margin-bottom:8px;">フォルダを押すと中のセットが表示されます</div>
     <div id="folderListItems"></div>
@@ -1164,11 +1221,11 @@
 
 <!-- ===== 下部タブバー(撮影／出力／暗記／保存済み／データ) ===== -->
 <div id="tabBar">
-  <button class="tab-btn active" data-tab="capture"><span class="tab-ico">📷</span>撮影</button>
-  <button class="tab-btn" data-tab="export"><span class="tab-ico">📄</span>出力</button>
-  <button class="tab-btn" data-tab="study"><span class="tab-ico">🧠</span>暗記</button>
-  <button class="tab-btn" data-tab="saved"><span class="tab-ico">📁</span>保存済み</button>
-  <button class="tab-btn" data-tab="data"><span class="tab-ico">⚙️</span>データ</button>
+  <button class="tab-btn active" data-tab="capture"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7l1.5-3h3L15 7"/><circle cx="12" cy="13" r="3.5"/></svg></span>撮影</button>
+  <button class="tab-btn" data-tab="export"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9h6M9 13h6"/></svg></span>出力</button>
+  <button class="tab-btn" data-tab="study"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 1 3.4 10.9c-.6.5-.9 1-1 2.1H9.6c-.1-1.1-.4-1.6-1-2.1A6 6 0 0 1 12 3z"/><path d="M9.5 19h5M10.5 21.5h3"/></svg></span>暗記</button>
+  <button class="tab-btn" data-tab="saved"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>保存済み</button>
+  <button class="tab-btn" data-tab="data"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v13c0 1.7 3.1 3 7 3s7-1.3 7-3v-13"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span>データ</button>
 </div>
 
 <!-- ===== 一問一答：練習画面(全画面) =====
@@ -1265,6 +1322,8 @@
   </div>
 </div>
 
+<div id="toast"></div>
+
 <!-- PDF作成に使うライブラリは、JS側で複数の読み込み元を
      順番に試すようにしています(下のscript内のensureJsPDF)。
      どこか1つが繋がらなくても他で読み込めるためです。 -->
@@ -1360,6 +1419,7 @@ const flipBtn     = document.getElementById('flipBtn');
 const shootBtn    = document.getElementById('shootBtn');
 const pdfBtn      = document.getElementById('pdfBtn');
 const zipBtn      = document.getElementById('zipBtn');
+const goExportBtn = document.getElementById('goExportBtn');
 const resetBtn    = document.getElementById('resetBtn');
 const statusEl    = document.getElementById('status');
 const thumbsEl    = document.getElementById('thumbs');
@@ -1420,6 +1480,7 @@ const deckBulkPdfBtn  = document.getElementById('deckBulkPdfBtn');
 const deckBulkZipBtn  = document.getElementById('deckBulkZipBtn');
 const deckBulkDeleteBtn = document.getElementById('deckBulkDeleteBtn');
 const deckListItems   = document.getElementById('deckListItems');
+const deckSearchInput = document.getElementById('deckSearchInput');
 
 // ---- データ書き出し／読み込み ----
 const exportDataBtn  = document.getElementById('exportDataBtn');
@@ -1626,9 +1687,24 @@ let facingMode = 'environment'; // 'environment'=背面カメラ, 'user'=内カ�
 let currentTrack = null;
 let zoomMode = 'none';   // 'hardware' = 端末のズーム機能, 'css' = 映像を拡大表示
 
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(msg, isError){
+  if(!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.className = isError ? 'error show' : 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastEl.className = ''; }, isError ? 4200 : 2600);
+}
+
 function setStatus(msg, isError=false){
   statusEl.textContent = msg;
   statusEl.className = isError ? 'error' : '';
+  // 完了・失敗のお知らせだけ、どのタブにいても見える場所(トースト)にも出す。
+  // 「起動しています…」のような途中経過は今まで通り#statusだけに出す
+  if(isError || /しました|失敗|エラー|ありません|できません/.test(msg)){
+    showToast(msg, isError);
+  }
 }
 
 /* ---------- 枠のサイズ切り替え(大/中/小/極細/カスタム) ----------
@@ -1658,6 +1734,7 @@ document.querySelectorAll('.btn-toggle[data-size]').forEach(btn=>{
       const isVertical = frameEl.classList.contains('vertical');
       frameEl.className = 'size-' + btn.dataset.size + (isVertical ? ' vertical' : '');
     }
+    saveAppSetting('size', btn.dataset.size);
   });
 });
 
@@ -1669,6 +1746,8 @@ function applyCustomFrameSize(){
   customHeightVal.textContent = h + '%';
   frameEl.style.width = w + '%';
   frameEl.style.height = h + '%';
+  saveAppSetting('customW', w);
+  saveAppSetting('customH', h);
 }
 customWidthSlider.addEventListener('input', applyCustomFrameSize);
 customHeightSlider.addEventListener('input', applyCustomFrameSize);
@@ -1768,11 +1847,14 @@ refreshTemplateSelect(); // ページを開いた時点で保存済みテンプ�
 colsMinus.addEventListener('click', ()=>{
   const v = Math.max(1, parseInt(layoutColsSel.value,10) - 1);
   layoutColsSel.value = v;
+  saveAppSetting('cols', v);
 });
 colsPlus.addEventListener('click', ()=>{
   const v = Math.min(8, parseInt(layoutColsSel.value,10) + 1);
   layoutColsSel.value = v;
+  saveAppSetting('cols', v);
 });
+pageSizeSel.addEventListener('change', ()=> saveAppSetting('pageSize', pageSizeSel.value));
 
 /* ---------- 一問一答：隠す範囲(マスク)機能 ----------
    ONにすると、カメラ枠のふちに白いつまみが出てくる。
@@ -2054,7 +2136,7 @@ function pickFromList(title, options){
 async function folderPickOptions(){
   const folders = await loadFolders();
   return [{ label:'（フォルダなし）', value:'' }].concat(
-    folders.map(f => ({ label:'📁 ' + f.name, value:f.name }))
+    folders.map(f => ({ label: f.name, value:f.name }))
   );
 }
 
@@ -2065,7 +2147,7 @@ async function deckPickOptions(excludeName){
   return list
     .filter(d => d.name !== excludeName)
     .map(d => ({
-      label: (d.folder ? ('📁' + d.folder + ' / ') : '') + d.name + '（' + d.shots.length + '枚）',
+      label: (d.folder ? (d.folder + ' / ') : '') + d.name + '（' + d.shots.length + '枚）',
       value: d.name
     }));
 }
@@ -2078,6 +2160,7 @@ let currentBrowseFolder = null; // null=フォルダ一覧を表示中。文字�
 let deckSelectMode = false;
 let selectedDeckNames = new Set();
 let deckListCache = []; // renderDeckListが最後に読み込んだ全セット。PDF書き出しを「待たずに」始めるために使う
+let deckSearchQuery = ''; // セット名の検索語。検索中は currentBrowseFolder が '__search__' になる
 
 async function refreshBrowseView(){
   if(currentBrowseFolder === null){
@@ -2085,6 +2168,19 @@ async function refreshBrowseView(){
   }else{
     await renderDeckList();
   }
+}
+
+/* フォルダ(または「すべてのセット」などの特殊ビュー)を開いて
+   セット一覧に切り替える共通処理 */
+function openDeckPanel(folderValue){
+  currentBrowseFolder = folderValue;
+  folderListPanel.style.display = 'none';
+  deckListPanel.style.display = 'block';
+  deckSelectMode = false;
+  deckSelectModeBtn.classList.remove('active');
+  deckBulkBar.classList.remove('active');
+  selectedDeckNames = new Set();
+  renderDeckList();
 }
 
 async function renderFolderList(){
@@ -2102,14 +2198,7 @@ async function renderFolderList(){
     main.className = 'browse-main';
     main.innerHTML = '<div class="browse-title">' + label + '</div>' +
       '<div class="browse-sub">' + countIn(folderValue) + '個のセット</div>';
-    main.addEventListener('click', ()=>{
-      currentBrowseFolder = folderValue;
-      folderListPanel.style.display = 'none';
-      deckListPanel.style.display = 'block';
-      deckSelectMode = false;
-      selectedDeckNames = new Set();
-      renderDeckList();
-    });
+    main.addEventListener('click', ()=> openDeckPanel(folderValue));
     row.appendChild(main);
 
     const actions = document.createElement('div');
@@ -2155,21 +2244,55 @@ async function renderFolderList(){
   };
 
   makeFolderRow('（フォルダなし）', '', false);
-  folders.forEach(f => makeFolderRow('📁 ' + f.name, f.name, true));
+
+  // フォルダを経由せず、全セットをまとめて見たいとき用の一覧への入り口
+  if(decks.length > 0){
+    const row = document.createElement('div');
+    row.className = 'browse-item';
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">すべてのセット</div>' +
+      '<div class="browse-sub">' + decks.length + '個のセット（フォルダ横断）</div>';
+    main.addEventListener('click', ()=> openDeckPanel('__all__'));
+    row.appendChild(main);
+    folderListItems.appendChild(row);
+  }
+
+  folders.forEach(f => makeFolderRow(f.name, f.name, true));
 
   if(folders.length === 0 && decks.length === 0){
     const note = document.createElement('div');
     note.className = 'browse-empty';
-    note.textContent = 'まだ保存したセットがありません';
+    note.textContent = 'まだ保存したセットがありません。撮影タブで写真を撮って、暗記タブから名前をつけて保存できます';
     folderListItems.appendChild(note);
   }
 }
 
 backToFoldersBtn.addEventListener('click', ()=>{
   currentBrowseFolder = null;
+  deckSearchInput.value = '';
+  deckSearchQuery = '';
   deckListPanel.style.display = 'none';
   folderListPanel.style.display = 'block';
   renderFolderList();
+});
+
+/* セット名の検索：入力すると全フォルダから名前で絞り込んだ一覧になる。
+   空に戻すとフォルダ一覧に帰る */
+deckSearchInput.addEventListener('input', ()=>{
+  deckSearchQuery = deckSearchInput.value.trim();
+  if(deckSearchQuery){
+    if(currentBrowseFolder !== '__search__'){
+      openDeckPanel('__search__');
+    }else{
+      renderDeckList();
+    }
+  }else if(currentBrowseFolder === '__search__'){
+    currentBrowseFolder = null;
+    deckListPanel.style.display = 'none';
+    folderListPanel.style.display = 'block';
+    renderFolderList();
+  }
 });
 
 deckSelectModeBtn.addEventListener('click', ()=>{
@@ -2264,14 +2387,26 @@ deckBulkZipBtn.addEventListener('click', async ()=>{
 async function renderDeckList(){
   const list = await loadDecks();
   deckListCache = list;
-  const decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
-  deckListTitle.textContent = currentBrowseFolder ? ('📁 ' + currentBrowseFolder) : '（フォルダなし）';
+  let decks;
+  if(currentBrowseFolder === '__all__'){
+    decks = list;
+    deckListTitle.textContent = 'すべてのセット（' + list.length + '個）';
+  }else if(currentBrowseFolder === '__search__'){
+    const q = deckSearchQuery.toLowerCase();
+    decks = list.filter(d => d.name.toLowerCase().includes(q));
+    deckListTitle.textContent = '「' + deckSearchQuery + '」の検索結果（' + decks.length + '個）';
+  }else{
+    decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
+    deckListTitle.textContent = currentBrowseFolder ? currentBrowseFolder : '（フォルダなし）';
+  }
   deckListItems.innerHTML = '';
 
   if(decks.length === 0){
     const note = document.createElement('div');
     note.className = 'browse-empty';
-    note.textContent = 'このフォルダにはまだセットがありません';
+    note.textContent = currentBrowseFolder === '__search__'
+      ? '「' + deckSearchQuery + '」に当てはまるセットがありません'
+      : 'このフォルダにはまだセットがありません';
     deckListItems.appendChild(note);
     return;
   }
@@ -2289,6 +2424,15 @@ async function renderDeckList(){
       else selectedDeckNames.delete(d.name);
     });
     row.appendChild(check);
+
+    // 中身がひと目で分かるよう、先頭のカードを小さく表示する
+    if(d.shots && d.shots.length > 0){
+      const thumb = document.createElement('img');
+      thumb.className = 'browse-thumb';
+      thumb.src = d.shots[0].dataUrl;
+      thumb.alt = '';
+      row.appendChild(thumb);
+    }
 
     const main = document.createElement('div');
     main.className = 'browse-main';
@@ -2373,9 +2517,54 @@ async function renderDeckList(){
         setStatus('セット「' + d.name + '」を削除しました');
       });
 
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'btn-secondary';
+      renameBtn.textContent = '名前変更';
+      renameBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const newName = prompt('セットの新しい名前を入力してください', d.name);
+        if(newName === null) return;
+        const trimmed = newName.trim();
+        if(!trimmed || trimmed === d.name) return;
+        const list = await loadDecks();
+        if(list.some(x => x.name === trimmed)){
+          setStatus('同じ名前のセットがすでにあります', true);
+          return;
+        }
+        // セットは名前がキーなので、新しい名前で保存してから古い名前を消す
+        await saveDeckToStorage({ ...d, name: trimmed });
+        await deleteDeckFromStorage(d.name);
+        deckListCache = deckListCache.map(x => x.name === d.name ? { ...x, name: trimmed } : x);
+        await renderDeckList();
+        setStatus('セット名を「' + trimmed + '」に変更しました');
+      });
+
+      const dupBtn = document.createElement('button');
+      dupBtn.className = 'btn-secondary';
+      dupBtn.textContent = '複製';
+      dupBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const list = await loadDecks();
+        let candidate = d.name + ' のコピー';
+        let n = 2;
+        while(list.some(x => x.name === candidate)){
+          candidate = d.name + ' のコピー' + n;
+          n++;
+        }
+        const copy = JSON.parse(JSON.stringify(d));
+        copy.name = candidate;
+        // カードのIDは重複しないよう振り直す(読み込み時のマージで別カードとして扱われるように)
+        copy.shots = (copy.shots || []).map(s => ({ ...s, id: makeShotId() }));
+        await saveDeckToStorage(copy);
+        await renderDeckList();
+        setStatus('セット「' + candidate + '」を複製しました');
+      });
+
       actions.appendChild(practiceBtn);
       actions.appendChild(moveBtn);
       actions.appendChild(exportBtn);
+      actions.appendChild(renameBtn);
+      actions.appendChild(dupBtn);
       actions.appendChild(delBtn);
       row.appendChild(actions);
     }
@@ -3182,6 +3371,7 @@ document.querySelectorAll('.btn-toggle[data-orient]').forEach(btn=>{
     document.querySelectorAll('.btn-toggle[data-orient]').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     frameEl.classList.toggle('vertical', btn.dataset.orient === 'vertical');
+    saveAppSetting('orient', btn.dataset.orient);
   });
 });
 
@@ -3558,6 +3748,7 @@ function renderThumbs(){
   shootBtn.disabled = !currentStream; // 撮影枚数の上限は撤廃したので、カメラが起動していれば撮影可能
   pdfBtn.disabled = shots.length === 0;
   zipBtn.disabled = shots.length === 0;
+  goExportBtn.disabled = shots.length === 0;
   qaViewBtn.disabled = shots.length === 0;
   saveDeckBtn.disabled = shots.length === 0;
   // 練習画面が「今の写真」を見ている最中(＝保存済みセットではない)場合だけ、
@@ -3665,6 +3856,13 @@ function buildAndDownloadPdfForShots(targetShots, filename){
   }
 }
 
+/* 撮影タブから出力タブへ移動するだけのショートカット。
+   PDFの設定と作成は今まで通り出力タブで行う */
+goExportBtn.addEventListener('click', ()=>{
+  const btn = document.querySelector('.tab-btn[data-tab="export"]');
+  if(btn) btn.click();
+});
+
 pdfBtn.addEventListener('click', ()=>{
   // 前に途中まで動いて固まっていた原因：処理の途中でawait(非同期の待ち)が
   // 入っていたため、iOSのSafariが「ボタンを押した操作の続き」とみなさなくなり、
@@ -3747,6 +3945,38 @@ zipBtn.addEventListener('click', async ()=>{
     zipBtn.disabled = shots.length === 0;
   }
 });
+
+/* ---------- 設定の記憶 ----------
+   用紙サイズ・列数・撮影枠のサイズと向きは、毎回選び直さなくて済むよう
+   ブラウザに覚えさせて、次に開いたときに復元する */
+const APP_SETTINGS_KEY = 'wordAppSettings';
+function loadAppSettings(){
+  try{ return JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveAppSetting(key, value){
+  try{
+    const s = loadAppSettings();
+    s[key] = value;
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(s));
+  }catch(e){}
+}
+function restoreAppSettings(){
+  const s = loadAppSettings();
+  if(s.pageSize) pageSizeSel.value = s.pageSize;
+  if(s.cols) layoutColsSel.value = Math.max(1, Math.min(8, parseInt(s.cols, 10) || 2));
+  if(s.customW) customWidthSlider.value = s.customW;
+  if(s.customH) customHeightSlider.value = s.customH;
+  if(s.size){
+    const b = document.querySelector('.btn-toggle[data-size="' + s.size + '"]');
+    if(b) b.click();
+  }
+  if(s.orient){
+    const b = document.querySelector('.btn-toggle[data-orient="' + s.orient + '"]');
+    if(b) b.click();
+  }
+}
+restoreAppSettings();
 
 /* 初期状態の見た目を整える */
 renderThumbs();
