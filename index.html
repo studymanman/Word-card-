@@ -3,20 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f3efe6">
 <title>単語帳スキャナー</title>
 <style>
   /* ===== 全体の色・余白などをまとめて管理する場所 =====
      色を変えたいときはここの値だけ書き換えればOKです */
   :root{
-    --bg: #12151c;
-    --panel: #1c212c;
-    --panel-soft: #242b38;
-    --accent: #5ec8a8;
-    --accent-dark: #3fa285;
+    /* 紙と赤ペンをイメージしたライトテーマ。
+       以前の「暗い紺+ミントグリーン」は量産型のAIデザインに見えたため、
+       温かみのある紙色の背景+墨色の文字+朱色のアクセントに刷新した */
+    --bg: #f3efe6;
+    --panel: #fffdf8;
+    --panel-soft: #ece5d5;
+    --accent: #d9481f;
+    --accent-dark: #b23a17;
     --accent-mid: #d9a441;
-    --text: #eef1f5;
-    --text-dim: #9aa4b2;
-    --danger: #e2685f;
+    --accent-text: #ffffff;
+    --text: #26241f;
+    --text-dim: #7a7263;
+    --danger: #c93a32;
+    --btn-bg: #e9e2d2;
     --radius: 14px;
     --radius-sm: 9px;
     --radius-lg: 20px;
@@ -24,7 +30,7 @@
     --sp-2: 8px;
     --sp-3: 12px;
     --sp-4: 16px;
-    --shadow-soft: 0 4px 14px rgba(0,0,0,0.35);
+    --shadow-soft: 0 4px 14px rgba(74,60,30,0.12);
     --tabbar-h: 60px;
     --safe-t: env(safe-area-inset-top, 0px);
     --safe-b: env(safe-area-inset-bottom, 0px);
@@ -62,6 +68,10 @@
     margin-bottom: var(--sp-3);
   }
   #appHeader .sub{ margin:2px 0 0; }
+  #appHeader > div{
+    border-left: 4px solid var(--accent);
+    padding-left: 10px;
+  }
 
   /* ---- 見出し付きの小セクション(パネル内をグルーピングして見やすくする) ---- */
   .section-label{
@@ -75,6 +85,7 @@
 
   .panel{
     background: var(--panel);
+    border: 1px solid #e7dfca;
     border-radius: var(--radius);
     padding: var(--sp-4);
     margin-bottom: var(--sp-3);
@@ -84,6 +95,14 @@
   /* ---- タブページ(下のタブバーで切り替える単位) ---- */
   .tab-page{ display:none; }
   .tab-page.active{ display:block; }
+  /* iPadやPCの広い画面では、横いっぱいに引き伸ばされると
+     カメラ映像が巨大になったり行が間延びしたりするので、
+     本体は中央寄せの最大幅で止める(タブバーは全幅のまま) */
+  .tab-page, #appHeader{
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 
   /* ---- カメラまわり ---- */
   #cameraWrap{
@@ -206,12 +225,12 @@
 
   .btn-toggle{
     flex:1;
-    background:#2a3140;
+    background:var(--btn-bg);
     color: var(--text-dim);
   }
   .btn-toggle.active{
     background: var(--accent);
-    color:#08251c;
+    color:var(--accent-text);
     font-weight:600;
   }
 
@@ -221,15 +240,15 @@
     font-size:16px;
     font-weight:700;
     background: var(--accent);
-    color:#08251c;
+    color:var(--accent-text);
   }
   .btn-main:disabled{
-    background:#3a4150;
-    color:#6c7684;
+    background:#ded7c6;
+    color:#9c968a;
   }
 
   .btn-secondary{
-    background:#2a3140;
+    background:var(--btn-bg);
     color:var(--text);
     flex:1;
   }
@@ -355,7 +374,7 @@
 
   select{
     font-family:inherit;
-    background:#2a3140;
+    background:var(--btn-bg);
     color:var(--text);
     border:none;
     border-radius:10px;
@@ -485,7 +504,7 @@
     inset:0;
     background:var(--bg);
     z-index:50;
-    padding:16px 16px 12px;
+    padding:16px max(16px, calc((100% - 700px) / 2)) 12px;
     /* 以前はここに overflow-y:auto を付けて中身を全部スクロールさせ、
        下の操作バー(#qaStickyBar)を position:sticky で常に見えるようにしていた。
        ただし中身がカメラの画面より短いとき、sticky は「スクロール領域の
@@ -516,7 +535,7 @@
   }
   .qa-mask{
     position:absolute;
-    background: var(--panel);
+    background: var(--panel-soft);
     border: 1px dashed var(--text-dim);
     box-sizing:border-box;
     display:none;
@@ -542,7 +561,7 @@
   }
   .qa-card-actions button.active{
     background: var(--accent);
-    color:#08251c;
+    color:var(--accent-text);
     font-weight:600;
   }
   .qa-card-actions button.mem-lvl-1{
@@ -614,7 +633,7 @@
   }
   .qa-list-mask{
     position:absolute;
-    background: var(--panel);
+    background: var(--panel-soft);
     border: 1px dashed var(--text-dim);
     box-sizing:border-box;
   }
@@ -622,7 +641,7 @@
     position:absolute;
     left:6px; top:6px;
     background: var(--accent);
-    color:#08251c;
+    color:var(--accent-text);
     font-size:11px;
     font-weight:700;
     padding:2px 7px;
@@ -630,7 +649,7 @@
     z-index:3;
     display:none;
   }
-  .qa-list-item.mem-lvl-2 .qa-list-badge{ display:block; background:var(--accent); color:#08251c; }
+  .qa-list-item.mem-lvl-2 .qa-list-badge{ display:block; background:var(--accent); color:var(--accent-text); }
   .qa-list-item.mem-lvl-1 .qa-list-badge{ display:block; background:#d9a441; color:#241a04; }
   .qa-list-actions{
     display:flex;
@@ -641,12 +660,12 @@
     flex:1;
     padding:8px 0;
     font-size:12.5px;
-    background:#2a3140;
+    background:var(--btn-bg);
     color:var(--text);
   }
   .qa-list-actions button.active{
     background: var(--accent);
-    color:#08251c;
+    color:var(--accent-text);
     font-weight:600;
   }
   .qa-list-actions button.mem-lvl-1{
@@ -741,7 +760,7 @@
     display:flex;
     flex-direction:column;
     gap:8px;
-    border-top:1px solid #2a3140;
+    border-top:1px solid var(--btn-bg);
     z-index:20;
   }
   #qaStickyBar .row{ margin-top:0; }
@@ -770,7 +789,7 @@
     display:flex;
     align-items:center;
     gap:8px;
-    background:#242b38;
+    background:var(--panel-soft);
     border-radius:10px;
     padding:10px 12px;
     margin-bottom:8px;
@@ -845,7 +864,7 @@
   .picker-option{
     width:100%;
     text-align:left;
-    background:#242b38;
+    background:var(--panel-soft);
     color:var(--text);
     border-radius:10px;
     padding:12px;
@@ -856,7 +875,7 @@
     width:100%;
     background:transparent;
     color:var(--text-dim);
-    border:1px solid #3a4150;
+    border:1px solid #cfc8b4;
   }
 
   /* ---- 画面下部のタブバー(撮影／一問一答／出力／保存済み／データ) ----
@@ -872,10 +891,10 @@
        本来と違う位置に「ゴースト」のように映り込むことがあった。
        ほぼ不透明な単色背景に変え、独自の描画レイヤーを持たせることで
        カメラ画面などに重なって映り込む不具合を防いでいる */
-    background: #14171f;
+    background: #fffdf8;
     transform: translateZ(0);
     will-change: transform;
-    border-top:1px solid #262d3a;
+    border-top:1px solid #e3dcc9;
     display:flex;
     z-index:40;
   }
@@ -908,7 +927,7 @@
   /* ---- セット検索欄 ---- */
   .deck-search{
     width:100%;
-    background:#2a3140;
+    background:var(--btn-bg);
     color:var(--text);
     border:none;
     border-radius:10px;
@@ -927,8 +946,8 @@
     left:50%;
     bottom: calc(var(--tabbar-h) + var(--safe-b) + 14px);
     transform: translateX(-50%) translateY(8px);
-    background: rgba(38,44,56,0.97);
-    color: var(--text);
+    background: rgba(38,36,31,0.96);
+    color: #f5f1e6;
     font-size:13.5px;
     padding:10px 16px;
     border-radius:12px;
@@ -947,7 +966,7 @@
   .progress-bar{
     height:7px;
     border-radius:99px;
-    background:#2a3140;
+    background:var(--btn-bg);
     overflow:hidden;
     margin:6px 0 2px;
   }
@@ -979,7 +998,7 @@
   #qaSearchRow{ position:relative; }
   #qaSearchInput{
     width:100%;
-    background:#2a3140;
+    background:var(--btn-bg);
     color:var(--text);
     border:none;
     border-radius:10px;
@@ -1115,7 +1134,7 @@
     <span class="custom-slider-label" style="width:auto;">列数</span>
     <button id="colsMinus" class="btn-secondary" style="flex:0 0 44px;">－</button>
     <input type="number" id="layoutCols" min="1" max="8" value="2" readonly
-           style="width:56px; text-align:center; background:#2a3140; color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
+           style="width:56px; text-align:center; background:var(--btn-bg); color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
     <button id="colsPlus" class="btn-secondary" style="flex:0 0 44px;">＋</button>
     <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
   </div>
