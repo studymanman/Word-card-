@@ -1133,6 +1133,8 @@
     </div>
     <div id="deckBulkBar" class="bulk-bar">
       <button id="deckBulkMoveBtn" class="btn-secondary">選んだセットを別フォルダへ移動</button>
+      <button id="deckBulkPdfBtn" class="btn-secondary">選んだセットをPDFで書き出す</button>
+      <button id="deckBulkZipBtn" class="btn-secondary">選んだセットを画像（ZIP）で書き出す</button>
       <button id="deckBulkDeleteBtn" class="btn-danger">選んだセットを削除</button>
     </div>
     <div id="deckListItems"></div>
@@ -1414,6 +1416,8 @@ const deckListTitle   = document.getElementById('deckListTitle');
 const deckSelectModeBtn = document.getElementById('deckSelectModeBtn');
 const deckBulkBar     = document.getElementById('deckBulkBar');
 const deckBulkMoveBtn = document.getElementById('deckBulkMoveBtn');
+const deckBulkPdfBtn  = document.getElementById('deckBulkPdfBtn');
+const deckBulkZipBtn  = document.getElementById('deckBulkZipBtn');
 const deckBulkDeleteBtn = document.getElementById('deckBulkDeleteBtn');
 const deckListItems   = document.getElementById('deckListItems');
 
@@ -2073,6 +2077,7 @@ async function deckPickOptions(excludeName){
 let currentBrowseFolder = null; // null=フォルダ一覧を表示中。文字列(''含む)=そのフォルダの中を表示中
 let deckSelectMode = false;
 let selectedDeckNames = new Set();
+let deckListCache = []; // renderDeckListが最後に読み込んだ全セット。PDF書き出しを「待たずに」始めるために使う
 
 async function refreshBrowseView(){
   if(currentBrowseFolder === null){
@@ -2209,8 +2214,56 @@ deckBulkDeleteBtn.addEventListener('click', async ()=>{
   await renderDeckList();
 });
 
+/* 選んだセットを全部つなげて1つのPDFにする。
+   PDFは撮影画面のボタンと同じく「待たずに同期で」作る必要があるので、
+   セット一覧を表示したときに読み込んでおいた deckListCache を使う */
+deckBulkPdfBtn.addEventListener('click', ()=>{
+  if(selectedDeckNames.size === 0) return;
+  const targets = deckListCache.filter(d => selectedDeckNames.has(d.name));
+  if(targets.length === 0) return;
+  const allShots = [];
+  targets.forEach(d => d.shots.forEach(s => allShots.push(s)));
+  const ok = buildAndDownloadPdfForShots(allShots, '選んだセット（' + targets.length + '個）.pdf');
+  if(ok) setStatus('選んだ' + targets.length + '個のセットを1つのPDFにまとめました（全' + allShots.length + '枚）');
+});
+
+/* 選んだセットの画像を、セットごとのフォルダに分けて1つのZIPにする */
+deckBulkZipBtn.addEventListener('click', async ()=>{
+  if(selectedDeckNames.size === 0) return;
+  const targets = deckListCache.filter(d => selectedDeckNames.has(d.name));
+  if(targets.length === 0) return;
+  deckBulkZipBtn.disabled = true;
+  setStatus('画像をまとめています…');
+  try{
+    const okLib = await ensureJSZip();
+    if(!okLib || !window.JSZip){
+      setStatus('ZIP機能の読み込みに失敗しました。電波の良い場所でもう一度試してください。', true);
+      return;
+    }
+    const zip = new JSZip();
+    targets.forEach(d=>{
+      const folder = zip.folder(d.name.replace(/[\\/:*?"<>|]/g, '_'));
+      d.shots.forEach((shot, idx)=>{
+        const base64 = shot.dataUrl.split(',')[1];
+        const num = String(idx + 1).padStart(3, '0');
+        folder.file('単語' + num + '.jpg', base64, { base64: true });
+      });
+    });
+    const blob = await zip.generateAsync({ type:'blob' });
+    downloadBlob(blob, '選んだセット画像.zip');
+    const total = targets.reduce((n, d)=> n + d.shots.length, 0);
+    setStatus('選んだ' + targets.length + '個のセットの画像をZIPで保存しました（全' + total + '枚）');
+  }catch(err){
+    console.error(err);
+    setStatus('画像の保存に失敗しました：' + (err && err.message ? err.message : '不明なエラー'), true);
+  }finally{
+    deckBulkZipBtn.disabled = false;
+  }
+});
+
 async function renderDeckList(){
   const list = await loadDecks();
+  deckListCache = list;
   const decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
   deckListTitle.textContent = currentBrowseFolder ? ('📁 ' + currentBrowseFolder) : '（フォルダなし）';
   deckListItems.innerHTML = '';
@@ -2277,16 +2330,36 @@ async function renderDeckList(){
         setStatus('セット「' + d.name + '」を移動しました');
       });
 
-      // このセット(ファイル)1個だけを書き出す。データ移動でファイル単位で渡したいときに使う
+      // このセット(ファイル)1個だけを書き出す。形式はピッカーで選ぶ：
+      // PDF／画像(ZIP)は印刷や共有用、データ(JSON)は端末間の引き継ぎ用
       const exportBtn = document.createElement('button');
       exportBtn.className = 'btn-secondary';
       exportBtn.textContent = '書き出す';
       exportBtn.addEventListener('click', async (e)=>{
         e.stopPropagation();
-        const allFolders = await loadFolders();
-        const folderObj = d.folder ? allFolders.find(f => f.name === d.folder) : null;
-        downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], [d]), d.name + '.json');
-        setStatus('セット「' + d.name + '」を書き出しました');
+        const kind = await pickFromList('「' + d.name + '」を書き出す形式を選んでください', [
+          { label:'PDFで書き出す', value:'pdf' },
+          { label:'画像（ZIP）で書き出す', value:'zip' },
+          { label:'データ（JSON）で書き出す', value:'json' }
+        ]);
+        if(kind === 'pdf'){
+          const ok = buildAndDownloadPdfForShots(d.shots, d.name + '.pdf');
+          if(ok) setStatus('セット「' + d.name + '」のPDFをダウンロードしました');
+        }else if(kind === 'zip'){
+          setStatus('画像をまとめています…');
+          try{
+            const okZip = await downloadShotsAsZip(d.shots, d.name + '画像.zip');
+            if(okZip) setStatus('セット「' + d.name + '」の画像をZIPで保存しました（' + d.shots.length + '枚）');
+          }catch(err){
+            console.error(err);
+            setStatus('画像の保存に失敗しました：' + (err && err.message ? err.message : '不明なエラー'), true);
+          }
+        }else if(kind === 'json'){
+          const allFolders = await loadFolders();
+          const folderObj = d.folder ? allFolders.find(f => f.name === d.folder) : null;
+          downloadJSON(makeExportPayload(folderObj ? [folderObj] : [], [d]), d.name + '.json');
+          setStatus('セット「' + d.name + '」を書き出しました');
+        }
       });
 
       const delBtn = document.createElement('button');
@@ -3527,7 +3600,13 @@ resetBtn.addEventListener('click', ()=>{
    列数(1〜8)は「列数」のステッパーで自由に選べます。
 */
 function buildAndDownloadPdf(filename){
-  if(shots.length === 0) return false;
+  return buildAndDownloadPdfForShots(shots, filename);
+}
+
+/* 撮影中の写真(shots)以外にも、保存済みセットの写真でもPDFを作れるように
+   写真の配列を受け取る形にしたもの。中身のレイアウト処理は今まで通り */
+function buildAndDownloadPdfForShots(targetShots, filename){
+  if(!targetShots || targetShots.length === 0) return false;
 
   if(!(window.jspdf && window.jspdf.jsPDF)){
     setStatus('PDF機能の読み込みに失敗しました。電波の良い場所でもう一度ボタンを押してみてください。', true);
@@ -3556,9 +3635,9 @@ function buildAndDownloadPdf(filename){
 
     let cursorY = margin;
 
-    // shotsをcolumns個ずつの「行」に分けて、行ごとに高さをそろえて並べる
-    for(let i=0; i<shots.length; i += columns){
-      const rowItems = shots.slice(i, i + columns);
+    // 写真をcolumns個ずつの「行」に分けて、行ごとに高さをそろえて並べる
+    for(let i=0; i<targetShots.length; i += columns){
+      const rowItems = targetShots.slice(i, i + columns);
       const rowHeights = rowItems.map(s => colW * (s.height / s.width));
       const rowH = Math.max(...rowHeights);
 
@@ -3600,6 +3679,36 @@ pdfBtn.addEventListener('click', ()=>{
   // すでに表示済みなので、ここで上書きしない
   pdfBtn.disabled = false;
 });
+
+/* ---------- ZIP書き出しの共通処理 ----------
+   保存済みセットの書き出しでも使うため、撮影画面のZIP保存とまとめ方をそろえた */
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 3000);
+}
+
+async function downloadShotsAsZip(shotsArr, zipFilename){
+  const okLib = await ensureJSZip();
+  if(!okLib || !window.JSZip){
+    setStatus('ZIP機能の読み込みに失敗しました。電波の良い場所でもう一度試してください。', true);
+    return false;
+  }
+  const zip = new JSZip();
+  shotsArr.forEach((shot, idx)=>{
+    const base64 = shot.dataUrl.split(',')[1];
+    const num = String(idx + 1).padStart(3, '0');
+    zip.file('単語' + num + '.jpg', base64, { base64: true });
+  });
+  const blob = await zip.generateAsync({ type:'blob' });
+  downloadBlob(blob, zipFilename);
+  return true;
+}
 
 /* ---------- 画像をまとめてZIPで保存 ----------
    iPadのSafariは何枚もの画像を一度にダウンロードするのが苦手なため、
