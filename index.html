@@ -1024,7 +1024,7 @@
   .ai-result label{ display:block; font-size:12px; color:var(--text-dim); margin-top:8px; }
   .ai-result input[type="text"], .ai-result textarea{ width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(0,0,0,0.18); background:var(--btn-bg, #fff); color:var(--text); font-size:15px; font-family:inherit; }
   .ai-result textarea{ min-height:44px; resize:vertical; }
-  #aiOverlay{ position:fixed; inset:0; background:#111; z-index:80; display:none; flex-direction:column; }
+  #aiOverlay{ position:fixed; inset:0; height:100dvh; background:#111; z-index:80; display:none; flex-direction:column; }
   #aiOverlay.open{ display:flex; }
   .ai-cam-title{ color:#f5f1e6; font-size:13px; padding:calc(8px + var(--safe-t)) 12px 8px; text-align:center; }
   .ai-cam-area{ flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; min-height:0; }
@@ -1033,7 +1033,11 @@
   #aiPhotoWrap{ position:relative; width:100%; touch-action:none; }
   #aiPhotoImg{ width:100%; display:block; }
   #aiCropRect{ position:absolute; border:2px solid #ffd23f; box-shadow:0 0 0 9999px rgba(0,0,0,0.45); box-sizing:border-box; }
-  #aiCropHandle{ position:absolute; right:0; bottom:0; width:44px; height:44px; background:rgba(255,210,63,0.85); color:#111; font-size:22px; display:flex; align-items:center; justify-content:center; border-top-left-radius:10px; }
+  .ai-corner{ position:absolute; width:38px; height:38px; border-radius:50%; background:rgba(255,210,63,0.92); border:2px solid #111; box-sizing:border-box; z-index:2; }
+  .ai-corner[data-corner="tl"]{ left:0; top:0; transform:translate(calc(-50% - 16px), calc(-50% - 16px)); }
+  .ai-corner[data-corner="tr"]{ left:100%; top:0; transform:translate(calc(-50% + 16px), calc(-50% - 16px)); }
+  .ai-corner[data-corner="bl"]{ left:0; top:100%; transform:translate(calc(-50% - 16px), calc(-50% + 16px)); }
+  .ai-corner[data-corner="br"]{ left:100%; top:100%; transform:translate(calc(-50% + 16px), calc(-50% + 16px)); }
   .ai-cam-bar{ padding:10px 12px calc(10px + var(--safe-b)); background:#1c1c1e; display:flex; gap:8px; align-items:center; }
   .ai-cam-bar .btn-main, .ai-cam-bar .btn-secondary, .ai-cam-bar .btn-danger{ flex:1; }
 
@@ -1406,7 +1410,12 @@
     <div id="aiPhotoScroll" style="display:none;">
       <div id="aiPhotoWrap">
         <img id="aiPhotoImg" alt="撮影した写真">
-        <div id="aiCropRect"><div id="aiCropHandle">↘</div></div>
+        <div id="aiCropRect">
+          <div class="ai-corner" data-corner="tl"></div>
+          <div class="ai-corner" data-corner="tr"></div>
+          <div class="ai-corner" data-corner="bl"></div>
+          <div class="ai-corner" data-corner="br"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -4189,6 +4198,7 @@ async function aiOpenCapture(){
       video: { facingMode: 'environment' }
     });
     aiVideo.srcObject = aiStream;
+    aiSetupZoom();
   }catch(e){
     console.error(e);
     showToast('カメラを起動できませんでした', true);
@@ -4211,9 +4221,7 @@ function aiShowLive(){
   aiCropBar.style.display = 'none';
   document.getElementById('aiZoomBar').style.display = 'none';
   document.getElementById('aiLiveZoomBar').style.display = 'flex';
-  const lz = document.getElementById('aiLiveZoom');
-  if(lz) lz.value = '1';
-  aiVideo.style.transform = 'scale(1)';
+  aiSetupZoom();
   aiModeLabel.textContent = '単語が入るように写真を撮ってください（あとで囲むので、ざっくりでOK）';
 }
 document.getElementById('aiOpenBtn').addEventListener('click', aiOpenCapture);
@@ -4246,7 +4254,7 @@ document.getElementById('aiShootBtn').addEventListener('click', ()=>{
   aiPhotoScroll.scrollLeft = 0;
   aiPhotoScroll.scrollTop = 0;
   document.getElementById('aiZoomLabel').textContent = '100%';
-  aiModeLabel.textContent = '調べたい単語だけを黄色い枠で囲んでください（枠は指の少し上についてきます。ピンチか＋ボタンで拡大できます）';
+  aiModeLabel.textContent = '調べたい単語だけを黄色い枠で囲んでください（四隅の丸で角ごとに調節、枠の中をドラッグで移動。ピンチか＋ボタンで拡大できます）';
   requestAnimationFrame(aiPositionRect);
   if(navigator.vibrate) navigator.vibrate(40);
 });
@@ -4259,14 +4267,19 @@ function aiPositionRect(){
 aiPhotoImg.addEventListener('load', aiPositionRect);
 
 /* ---------- 囲む枠のドラッグ操作とズーム ----------
-   指で線が隠れて見えない問題への対策として、枠は指の位置より
-   約56px「上」に追従させる(線が指の下ではなく上に来る)。
-   ズームはピンチか＋/−ボタンで写真の表示幅を変える方式。
-   レイアウトごと拡大するので、枠の割合計算はずれない */
+   範囲は「四隅の丸ハンドル」で角ごとに調節する方式。
+   ハンドルは角の少し外側に置き、ドラッグは指の移動量(デルタ)で
+   角を動かすので、角そのものが指の下に隠れず常に見える。
+   枠の中をドラッグすると全体が移動する(指の少し上に追従)。
+   写真のズームはピンチか＋/−ボタンで表示幅を変える方式で、
+   レイアウトごと拡大するため枠の割合計算はずれない。
+   カメラ側のズームは、端末が対応していれば本体のズーム
+   (トラックズーム)を使い、非対応なら画面拡大で代用する */
 const AI_TOUCH_OFFSET_Y = 56;
 let aiZoom = 1;
 const aiPointers = new Map();
 let aiPinch = null;
+let aiTrack = null, aiCamZoomMode = 'css';
 
 function aiApplyZoom(centerClient){
   let fx = null, fy = null;
@@ -4298,13 +4311,47 @@ document.getElementById('aiZoomResetBtn').addEventListener('click', ()=>{
   aiPhotoScroll.scrollLeft = 0;
   aiPhotoScroll.scrollTop = 0;
 });
+
+/* カメラのズーム: 本体ズーム(トラック)が使える端末ではそちらを使い、
+   使えない端末だけ画面拡大(疑似ズーム)に切り替える */
+function aiSetupZoom(){
+  aiVideo.style.transform = 'scale(1)';
+  const slider = document.getElementById('aiLiveZoom');
+  aiTrack = aiStream ? aiStream.getVideoTracks()[0] : null;
+  const caps = (aiTrack && aiTrack.getCapabilities) ? aiTrack.getCapabilities() : {};
+  if(caps && caps.zoom){
+    aiCamZoomMode = 'hardware';
+    slider.min = caps.zoom.min;
+    slider.max = caps.zoom.max;
+    slider.step = caps.zoom.step || 0.1;
+    slider.value = caps.zoom.min;
+  }else{
+    aiCamZoomMode = 'css';
+    slider.min = 1;
+    slider.max = 3;
+    slider.step = 0.05;
+    slider.value = 1;
+  }
+}
 document.getElementById('aiLiveZoom').addEventListener('input', (e)=>{
-  aiVideo.style.transform = 'scale(' + e.target.value + ')';
+  const val = parseFloat(e.target.value);
+  if(aiCamZoomMode === 'hardware' && aiTrack){
+    aiTrack.applyConstraints({ advanced: [{ zoom: val }] }).catch(err=> console.error(err));
+  }else{
+    aiVideo.style.transform = 'scale(' + val + ')';
+  }
 });
 
 (function(){
   let dragMode = null, sx = 0, sy = 0, startRect = null;
-  function frac(e){
+  function fracRaw(e){
+    const r = aiPhotoImg.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))
+    };
+  }
+  function fracLifted(e){
     const r = aiPhotoImg.getBoundingClientRect();
     return {
       x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
@@ -4315,7 +4362,6 @@ document.getElementById('aiLiveZoom').addEventListener('input', (e)=>{
     if(!aiPhotoData) return;
     aiPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if(aiPointers.size === 2){
-      // 2本目が触れたらピンチズームに切り替える(枠は元の状態に戻す)
       if(startRect){ aiRect = startRect; aiPositionRect(); }
       dragMode = null; startRect = null;
       const pts = [...aiPointers.values()];
@@ -4324,16 +4370,23 @@ document.getElementById('aiLiveZoom').addEventListener('input', (e)=>{
       e.preventDefault();
       return;
     }
-    const p = frac(e);
-    sx = p.x; sy = p.y; startRect = { ...aiRect };
-    if(e.target === document.getElementById('aiCropHandle')){
-      dragMode = 'resize';
-    }else if(p.x >= aiRect.x && p.x <= aiRect.x + aiRect.w &&
-             p.y >= aiRect.y && p.y <= aiRect.y + aiRect.h){
-      dragMode = 'move';
+    startRect = { ...aiRect };
+    if(e.target && e.target.classList && e.target.classList.contains('ai-corner')){
+      // 角のハンドル: 指の移動量でその角だけを動かす
+      dragMode = 'corner-' + e.target.dataset.corner;
+      const p = fracRaw(e);
+      sx = p.x; sy = p.y;
     }else{
-      dragMode = 'new';
-      aiRect = { x: p.x, y: p.y, w: 0.01, h: 0.01 };
+      const p = fracLifted(e);
+      if(p.x >= aiRect.x && p.x <= aiRect.x + aiRect.w &&
+         p.y >= aiRect.y && p.y <= aiRect.y + aiRect.h){
+        dragMode = 'move';
+        sx = p.x; sy = p.y;
+      }else{
+        dragMode = null; startRect = null;
+        aiPointers.delete(e.pointerId);
+        return;
+      }
     }
     try{ aiPhotoWrap.setPointerCapture(e.pointerId); }catch(err){}
     e.preventDefault();
@@ -4348,17 +4401,24 @@ document.getElementById('aiLiveZoom').addEventListener('input', (e)=>{
       return;
     }
     if(!dragMode || !startRect) return;
-    const p = frac(e);
-    const dx = p.x - sx, dy = p.y - sy;
+    const MINW = 0.06, MINH = 0.04;
+    const left = startRect.x, top = startRect.y;
+    const right = startRect.x + startRect.w, bottom = startRect.y + startRect.h;
     if(dragMode === 'move'){
+      const p = fracLifted(e);
+      const dx = p.x - sx, dy = p.y - sy;
       aiRect.x = Math.min(Math.max(startRect.x + dx, 0), 1 - startRect.w);
       aiRect.y = Math.min(Math.max(startRect.y + dy, 0), 1 - startRect.h);
-    }else if(dragMode === 'resize'){
-      aiRect.w = Math.min(Math.max(startRect.w + dx, 0.06), 1 - aiRect.x);
-      aiRect.h = Math.min(Math.max(startRect.h + dy, 0.04), 1 - aiRect.y);
-    }else if(dragMode === 'new'){
-      aiRect.x = Math.min(sx, p.x); aiRect.y = Math.min(sy, p.y);
-      aiRect.w = Math.abs(p.x - sx); aiRect.h = Math.abs(p.y - sy);
+    }else if(dragMode.indexOf('corner-') === 0){
+      const corner = dragMode.slice(7);
+      const p = fracRaw(e);
+      const dx = p.x - sx, dy = p.y - sy;
+      let nx = left, ny = top, nr = right, nb = bottom;
+      if(corner === 'tl' || corner === 'bl') nx = Math.min(Math.max(left + dx, 0), right - MINW);
+      if(corner === 'tr' || corner === 'br') nr = Math.max(Math.min(right + dx, 1), left + MINW);
+      if(corner === 'tl' || corner === 'tr') ny = Math.min(Math.max(top + dy, 0), bottom - MINH);
+      if(corner === 'bl' || corner === 'br') nb = Math.max(Math.min(bottom + dy, 1), top + MINH);
+      aiRect = { x: nx, y: ny, w: nr - nx, h: nb - ny };
     }
     aiPositionRect();
   });
