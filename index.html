@@ -1162,7 +1162,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 00:40（重なり・密着の全点検版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 00:52（インク節約モード追加版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1208,6 +1208,12 @@
            style="width:56px; text-align:center; background:var(--btn-bg); color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
     <button id="colsPlus" class="btn-secondary" style="flex:0 0 44px;">＋</button>
     <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
+  </div>
+  <div class="row" style="align-items:center;">
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;">
+      <input type="checkbox" id="inkSaveChk" style="width:20px; height:20px;">
+      印刷インク節約（写真の地を白く飛ばし、文字を薄くする）
+    </label>
   </div>
   <div class="row">
     <button id="pdfBtn" class="btn-main" disabled>PDFを作成してダウンロード</button>
@@ -3900,6 +3906,7 @@ function renderThumbs(){
   });
 
   countNumEl.textContent = shots.length;
+  try{ prepareInkImages(); }catch(e){}
   shootBtn.disabled = !currentStream; // 撮影枚数の上限は撤廃したので、カメラが起動していれば撮影可能
   pdfBtn.disabled = shots.length === 0;
   zipBtn.disabled = shots.length === 0;
@@ -3940,6 +3947,78 @@ resetBtn.addEventListener('click', ()=>{
   }
 });
 
+/* ---------- 印刷インク節約 ----------
+   写真のまま印刷すると、紙の地の色や影までグレーで印刷されて
+   インク(トナー)を大量に使う。そこで「地の色は純白に飛ばし、
+   文字は真っ黒ではなく濃いグレーまで」の印刷用画像を裏で
+   用意しておき、PDF作成時はそれを使う。作成処理そのものは
+   今まで通り同期のまま(事前に用意するだけ) */
+const inkSaveChk = document.getElementById('inkSaveChk');
+const inkCache = new Map();
+let inkSaveOn = !!loadAppSettings().inkSave;
+if(inkSaveChk){
+  inkSaveChk.checked = inkSaveOn;
+  inkSaveChk.addEventListener('change', ()=>{
+    inkSaveOn = inkSaveChk.checked;
+    saveAppSetting('inkSave', inkSaveOn);
+    if(inkSaveOn) prepareInkImages();
+  });
+}
+function inkProcessImage(dataUrl){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const maxSide = 1600;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const sc = Math.min(1, maxSide / Math.max(w, h));
+        w = Math.max(1, Math.round(w * sc));
+        h = Math.max(1, Math.round(h * sc));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d');
+        cx.drawImage(img, 0, 0, w, h);
+        const id = cx.getImageData(0, 0, w, h);
+        const px = id.data;
+        for(let i = 0; i < px.length; i += 4){
+          const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+          // 地の色(明るい部分)は純白に飛ばし、文字も真っ黒にはしない
+          const out = g >= 205 ? 255 : Math.round(100 + (g / 205) * 155);
+          px[i] = out; px[i + 1] = out; px[i + 2] = out;
+        }
+        cx.putImageData(id, 0, 0);
+        resolve(cv.toDataURL('image/jpeg', 0.85));
+      }catch(e){ resolve(dataUrl); }
+    };
+    img.onerror = ()=> resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+let inkPreparing = false;
+async function prepareInkImages(){
+  if(!inkSaveOn || inkPreparing) return;
+  inkPreparing = true;
+  try{
+    const targets = [];
+    (shots || []).forEach(s=> targets.push(s));
+    (deckListCache || []).forEach(d=> (d.shots || []).forEach(s=> targets.push(s)));
+    for(const s of targets){
+      if(s && s.dataUrl && !inkCache.has(s.dataUrl)){
+        inkCache.set(s.dataUrl, await inkProcessImage(s.dataUrl));
+      }
+    }
+  }catch(e){}
+  inkPreparing = false;
+}
+function inkUrl(shot){
+  if(inkSaveOn && shot && inkCache.has(shot.dataUrl)) return inkCache.get(shot.dataUrl);
+  return shot.dataUrl;
+}
+// タブを開くたびに未処理分を用意しておく
+document.querySelectorAll('.tab-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{ try{ prepareInkImages(); }catch(e){} });
+});
+
 /* ---------- PDF作成 ----------
    単語カードを、ページの上から下へ順番に並べていきます。
    入りきらなくなったら自動で次のページに移ります。
@@ -3973,10 +4052,10 @@ function makePdfTextImage(shot){
   cv.width = pxW;
   cv.height = pad * 2 + wrapped.length * lh;
   const cx = cv.getContext('2d');
-  cx.fillStyle = '#fffdf8';
+  cx.fillStyle = inkSaveOn ? '#ffffff' : '#fffdf8';
   cx.fillRect(0, 0, cv.width, cv.height);
   cx.font = fs + 'px sans-serif';
-  cx.fillStyle = '#26241f';
+  cx.fillStyle = inkSaveOn ? '#595959' : '#26241f';
   cx.textBaseline = 'top';
   wrapped.forEach((l, i)=> cx.fillText(l, pad, pad + i * lh));
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: cv.height / cv.width };
@@ -4037,7 +4116,7 @@ function buildAndDownloadPdfForShots(targetShots, filename){
       rowItems.forEach((shot, idx)=>{
         const x = margin + idx * (colW + columnGap);
         const h = colW * (shot.height / shot.width);
-        doc.addImage(shot.dataUrl, 'JPEG', x, cursorY, colW, h);
+        doc.addImage(inkUrl(shot), 'JPEG', x, cursorY, colW, h);
         const t = textImgs[i + idx];
         if(t) doc.addImage(t.dataUrl, 'JPEG', x, cursorY + h, colW, colW * t.aspect);
       });
