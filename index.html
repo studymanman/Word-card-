@@ -549,18 +549,19 @@
   #qaMaskRight { top:0; bottom:0; right:0; }
 
   /* ---- 一問一答：カード右下の「暗記済み／削除」ボタン ---- */
+  /* ボタンは画像に重ねず、画像の下(外側)に並べる。
+     画像の端にボタンがくっついて見えるのを避けるため */
   .qa-card-actions{
-    position:absolute;
-    right:8px; bottom:8px;
     display:flex;
     gap:6px;
-    z-index:7;
+    margin-top:10px;
   }
   .qa-card-actions button{
-    padding:8px 10px;
-    font-size:12px;
-    background:rgba(0,0,0,0.62);
-    color:#fff;
+    flex:1;
+    padding:10px 0;
+    font-size:13px;
+    background:var(--btn-bg);
+    color:var(--text);
   }
   .qa-card-actions button.active{
     background: var(--accent);
@@ -573,7 +574,10 @@
     font-weight:600;
   }
   .qa-card-actions .qa-del-single{
-    background:rgba(226,104,95,0.85);
+    background:transparent;
+    color:var(--danger);
+    border:1px solid var(--danger);
+    flex:0 0 60px;
   }
 
   /* ---- 一問一答：表示モード／フィルターの切り替え行 ---- */
@@ -1158,7 +1162,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-03 23:52（PDFに意味も表示・表示サイズ調整版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 00:26（ボタン配置の見直し版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1355,11 +1359,11 @@
       <div id="qaMaskLeft" class="qa-mask"></div>
       <div id="qaMaskRight" class="qa-mask"></div>
       <div id="qaCardNumBadge" class="qa-num-badge"></div>
-      <div class="qa-card-actions">
-        <button id="qaHintBtn">ヒント編集</button>
-        <button id="qaMemBtn">暗記済みにする</button>
-        <button id="qaDelBtn" class="qa-del-single">削除</button>
-      </div>
+    </div>
+    <div class="qa-card-actions">
+      <button id="qaHintBtn">ヒント編集</button>
+      <button id="qaMemBtn">暗記済みにする</button>
+      <button id="qaDelBtn" class="qa-del-single">削除</button>
     </div>
     <div id="qaHintBox" class="hint-box"></div>
     <div id="qaAnswerBox" class="hint-box answer-box" style="display:none;"></div>
