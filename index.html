@@ -4531,26 +4531,31 @@ async function aiCallApi(batch){
       maxOutputTokens: 8192
     }
   };
-  // モデルの提供状況はアカウントごとに違うため、使えないモデルだったら
-  // 次の候補を自動で試す(先頭がGoogle推奨の最新モデル)。
-  // 混雑(503)のときは少し待って同じモデルを再試行し、
-  // それでもダメなら次のモデルに切り替える
-  const AI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+  // 試す順番は「無料枠で空いているモデル」から。最新モデル(3.8)は
+  // 無料枠だと混雑(503)が頻発してほぼ当たらないため後ろに置き、
+  // 使えないモデル(新規キーでは2.x系が404)だったら次の候補へ進む。
+  // 混雑(503)のときは1回だけ待って再試行し、ダメなら次のモデルへ
+  const AI_MODELS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
   const aiSleep = (ms)=> new Promise(r=> setTimeout(r, ms));
   let data = null, lastErr = null;
   for(const mdl of AI_MODELS){
-    for(let attempt = 0; attempt < 3 && !data; attempt++){
+    for(let attempt = 0; attempt < 2 && !data; attempt++){
       try{
+        // Gemini 3系は思考レベルを low にして、応答が速く・壊れにくいようにする
+        const body = mdl.indexOf('gemini-3') === 0
+          ? { contents: bodyObj.contents,
+              generationConfig: { ...bodyObj.generationConfig, thinkingConfig: { thinkingLevel: 'low' } } }
+          : bodyObj;
         data = await aiGeminiFetch(key,
           'https://generativelanguage.googleapis.com/v1beta/models/' + mdl + ':generateContent',
-          bodyObj);
+          body);
       }catch(e){
         lastErr = e;
         const msg = (e && e.message) || '';
         if(/high demand|overloaded|try again later|UNAVAILABLE|\b503\b/i.test(msg)){
-          if(attempt < 2){
+          if(attempt < 1){
             aiSetStatus('AIが混み合っています。少し待って再試行中…', false);
-            await aiSleep(3000 * (attempt + 1));
+            await aiSleep(2500);
           }
           continue;
         }
@@ -4568,7 +4573,8 @@ async function aiCallApi(batch){
     throw lastErr || new Error('使えるモデルがありませんでした');
   }
   const cand = (data.candidates || [])[0];
-  const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string').map(b=>b.text).join('');
+  // 思考パート(thought:true)は答えではないので混ぜない
+  const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string' && !b.thought).map(b=>b.text).join('');
   if(!text) throw new Error('AIの返答が空でした');
   const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
   const arr = JSON.parse(cleaned);
