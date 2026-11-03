@@ -4463,17 +4463,30 @@ async function aiCallApi(batch){
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
   });
   parts.push({ text: AI_PROMPT });
-  const data = await aiGeminiFetch(key,
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-    {
-      contents: [{ parts: parts }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.4,
-        maxOutputTokens: 4096,
-        thinkingConfig: { thinkingBudget: 0 }
-      }
-    });
+  const bodyObj = {
+    contents: [{ parts: parts }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.4,
+      maxOutputTokens: 8192
+    }
+  };
+  // モデルの提供状況はアカウントごとに違うため、使えないモデルだったら
+  // 次の候補を自動で試す(先頭がGoogle推奨の最新モデル)
+  const AI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+  let data = null, lastErr = null;
+  for(const mdl of AI_MODELS){
+    try{
+      data = await aiGeminiFetch(key,
+        'https://generativelanguage.googleapis.com/v1beta/models/' + mdl + ':generateContent',
+        bodyObj);
+      break;
+    }catch(e){
+      lastErr = e;
+      if(!/no longer available|not found|not supported|is not available/i.test((e && e.message) || '')) throw e;
+    }
+  }
+  if(!data) throw lastErr || new Error('使えるモデルがありませんでした');
   const cand = (data.candidates || [])[0];
   const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string').map(b=>b.text).join('');
   if(!text) throw new Error('AIの返答が空でした');
