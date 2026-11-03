@@ -1007,6 +1007,36 @@
     font-family:inherit;
   }
   #qaSearchInput::placeholder{ color:var(--text-dim); }
+
+  /* ---- AI単語カード ---- */
+  .answer-box{ white-space:pre-line; font-size:17px; line-height:1.55; }
+  .answer-box.locked{ color:var(--text-dim); text-align:center; font-size:14px; }
+  #toast{ z-index:500 !important; }
+  .ai-key-row{ display:flex; gap:8px; }
+  .ai-key-row input{ flex:1; min-width:0; padding:10px 12px; border-radius:10px; border:1px solid rgba(0,0,0,0.18); background:var(--btn-bg, #fff); color:var(--text); font-size:14px; }
+  .ai-tray{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .ai-tray-item{ position:relative; width:100px; }
+  .ai-tray-item img{ width:100px; height:60px; object-fit:cover; border-radius:8px; display:block; border:1px solid rgba(0,0,0,0.15); }
+  .ai-tray-item button{ position:absolute; top:-8px; right:-8px; width:26px; height:26px; border-radius:50%; border:none; background:#c0392b; color:#fff; font-size:14px; line-height:1; padding:0; }
+  .ai-result{ border:1px solid rgba(0,0,0,0.14); border-radius:12px; padding:10px; margin-top:10px; background:var(--panel-soft, rgba(0,0,0,0.03)); }
+  .ai-result-head{ display:flex; gap:10px; align-items:flex-start; }
+  .ai-result-head img{ width:100px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(0,0,0,0.15); flex:none; }
+  .ai-result label{ display:block; font-size:12px; color:var(--text-dim); margin-top:8px; }
+  .ai-result input[type="text"], .ai-result textarea{ width:100%; padding:8px 10px; border-radius:8px; border:1px solid rgba(0,0,0,0.18); background:var(--btn-bg, #fff); color:var(--text); font-size:15px; font-family:inherit; }
+  .ai-result textarea{ min-height:44px; resize:vertical; }
+  #aiOverlay{ position:fixed; inset:0; background:#111; z-index:80; display:none; flex-direction:column; }
+  #aiOverlay.open{ display:flex; }
+  .ai-cam-title{ color:#f5f1e6; font-size:13px; padding:calc(8px + var(--safe-t)) 12px 8px; text-align:center; }
+  .ai-cam-area{ flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; min-height:0; }
+  #aiVideo{ width:100%; height:100%; object-fit:contain; background:#000; }
+  #aiPhotoScroll{ width:100%; max-height:100%; overflow-y:auto; }
+  #aiPhotoWrap{ position:relative; width:100%; touch-action:none; }
+  #aiPhotoImg{ width:100%; display:block; }
+  #aiCropRect{ position:absolute; border:2px solid #ffd23f; box-shadow:0 0 0 9999px rgba(0,0,0,0.45); box-sizing:border-box; }
+  #aiCropHandle{ position:absolute; right:0; bottom:0; width:44px; height:44px; background:rgba(255,210,63,0.85); color:#111; font-size:22px; display:flex; align-items:center; justify-content:center; border-top-left-radius:10px; }
+  .ai-cam-bar{ padding:10px 12px calc(10px + var(--safe-b)); background:#1c1c1e; display:flex; gap:8px; align-items:center; }
+  .ai-cam-bar .btn-main, .ai-cam-bar .btn-secondary, .ai-cam-bar .btn-danger{ flex:1; }
+
 </style>
 </head>
 <body>
@@ -1114,6 +1144,31 @@
   </div>
   <div id="thumbs"></div>
   <div id="emptyNote" class="empty-note">まだ撮影した単語がありません</div>
+</div>
+
+
+<div class="panel">
+  <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
+  <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
+  <div class="section-label" style="margin-top:10px;">Claude APIキー</div>
+  <div class="ai-key-row">
+    <input type="password" id="aiApiKeyInput" placeholder="sk-ant-..." autocomplete="off">
+    <button id="aiApiKeySaveBtn" class="btn-secondary">保存</button>
+  </div>
+  <div class="sub" id="aiApiKeyState">キーはこの端末の中だけに保存されます（GitHubには送られません）</div>
+  <div class="row" style="margin-top:10px;">
+    <button id="aiOpenBtn" class="btn-main" style="flex:1">写真を撮って単語を囲む</button>
+  </div>
+  <div class="section-label" style="margin-top:10px;">切り取った単語（<span id="aiTrayCount">0</span>語）</div>
+  <div id="aiTray" class="ai-tray"></div>
+  <div class="row" style="margin-top:10px;">
+    <button id="aiLookupBtn" class="btn-main" style="flex:1" disabled>AIで意味を調べる</button>
+  </div>
+  <div class="sub" id="aiStatus"></div>
+  <div id="aiResults"></div>
+  <div class="row" style="margin-top:10px;">
+    <button id="aiAddBtn" class="btn-main" style="flex:1; display:none;">この内容でカードに追加する</button>
+  </div>
 </div>
 
 </div><!-- /tab-page: capture -->
@@ -1295,6 +1350,7 @@
       </div>
     </div>
     <div id="qaHintBox" class="hint-box"></div>
+    <div id="qaAnswerBox" class="hint-box answer-box" style="display:none;"></div>
     <div class="sub" style="text-align:center; margin-top:6px;">カードをタップすると隠れている部分が見えます</div>
     <div class="row">
       <button id="qaPrevBtn" class="btn-secondary" style="flex:1">← 前へ</button>
@@ -1333,6 +1389,29 @@
 </div>
 
 <!-- ===== 移動先などを選ぶための簡易ピッカー ===== -->
+
+<!-- ===== AI単語カード：撮影＆切り取り画面(全画面) ===== -->
+<div id="aiOverlay">
+  <div class="ai-cam-title" id="aiModeLabel">単語が入るように写真を撮ってください</div>
+  <div class="ai-cam-area">
+    <video id="aiVideo" autoplay playsinline muted></video>
+    <div id="aiPhotoScroll" style="display:none;">
+      <div id="aiPhotoWrap">
+        <img id="aiPhotoImg" alt="撮影した写真">
+        <div id="aiCropRect"><div id="aiCropHandle">↘</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="ai-cam-bar" id="aiLiveBar">
+    <button id="aiCloseBtn" class="btn-danger">閉じる</button>
+    <button id="aiShootBtn" class="btn-main">撮影する</button>
+  </div>
+  <div class="ai-cam-bar" id="aiCropBar" style="display:none;">
+    <button id="aiRetakeBtn" class="btn-secondary">撮り直す</button>
+    <button id="aiCropBtn" class="btn-main">この範囲で切り取る</button>
+  </div>
+</div>
+
 <div id="pickerOverlay">
   <div id="pickerSheet">
     <div id="pickerTitle"></div>
@@ -2606,7 +2685,9 @@ saveDeckBtn.addEventListener('click', async ()=>{
       dataUrl:s.dataUrl, width:s.width, height:s.height, mask:s.mask,
       id: s.id || makeShotId(),
       memLevel: typeof s.memLevel === 'number' ? s.memLevel : (s.memorized ? 2 : 0),
-      hint: s.hint || ''
+      hint: s.hint || '',
+      // AIカードの答え(生成した日本語の意味)も落とさずに保存する
+      ...(s.answerText ? { answerText: s.answerText, word: s.word || '', surface: s.surface || '' } : {})
     }))
   };
 
@@ -2876,6 +2957,20 @@ function applyQaMaskVisibility(shot){
   [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{
     el.style.display = qaRevealed ? 'none' : 'block';
   });
+  // AIカード(答えが生成テキスト)は写真の中に答えが無いのでマスクは使わず、
+  // 代わりに下の答え欄で意味の表示/非表示を切り替える
+  const ansBox = document.getElementById('qaAnswerBox');
+  if(shot && shot.answerText){
+    [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{ el.style.display = 'none'; });
+    if(ansBox){
+      ansBox.style.display = 'block';
+      ansBox.textContent = qaRevealed ? shot.answerText : 'タップで意味を表示';
+      ansBox.classList.toggle('locked', !qaRevealed);
+    }
+  }else if(ansBox){
+    ansBox.style.display = 'none';
+    ansBox.textContent = '';
+  }
   qaMaskTop.style.height = m.top + '%';
   qaMaskBottom.style.height = m.bottom + '%';
   qaMaskLeft.style.width = m.left + '%';
@@ -3223,7 +3318,7 @@ function renderQaList(filtered){
       left:   { top:'0', bottom:'0', left:'0', width:m.left + '%' },
       right:  { top:'0', bottom:'0', right:'0', width:m.right + '%' }
     };
-    Object.keys(sideStyle).forEach(side=>{
+    if(!shot.answerText) Object.keys(sideStyle).forEach(side=>{
       const maskEl = document.createElement('div');
       maskEl.className = 'qa-list-mask';
       Object.assign(maskEl.style, sideStyle[side]);
@@ -3247,6 +3342,11 @@ function renderQaList(filtered){
     const hintBox = document.createElement('div');
     hintBox.className = 'hint-box' + ((revealed && shot.hint) ? ' show' : '');
     hintBox.textContent = shot.hint ? ('ヒント：' + shot.hint) : '';
+
+    // AIカードの答え(開いているときだけ、ヒントと並べて表示する)
+    const ansBox = document.createElement('div');
+    ansBox.className = 'hint-box answer-box' + ((revealed && shot.answerText) ? ' show' : '');
+    ansBox.textContent = shot.answerText || '';
 
     const actions = document.createElement('div');
     actions.className = 'qa-list-actions';
@@ -3292,6 +3392,7 @@ function renderQaList(filtered){
 
     item.appendChild(imgWrap);
     item.appendChild(hintBox);
+    item.appendChild(ansBox);
     item.appendChild(actions);
 
     attachQaDragHandlers(item);
@@ -3999,6 +4100,399 @@ restoreAppSettings();
 
 /* 初期状態の見た目を整える */
 renderThumbs();
+
+/* ================= AI単語カード =================
+   写真を撮ってから単語だけを囲んで切り取り、Claude APIに
+   「読み取り・原型化・日本語の意味・カタカナ語呂合わせ」を
+   一括で頼んで、一問一答カード(answerText付きのショット)を
+   作る機能。APIキーはこの端末のlocalStorageにだけ保存し、
+   Anthropic APIへのリクエスト以外で外部に送ることはない。 */
+const AI_KEY_STORAGE = 'wordAppClaudeKey';
+const aiApiKeyInput = document.getElementById('aiApiKeyInput');
+const aiApiKeyState = document.getElementById('aiApiKeyState');
+const aiTrayEl      = document.getElementById('aiTray');
+const aiTrayCountEl = document.getElementById('aiTrayCount');
+const aiLookupBtn   = document.getElementById('aiLookupBtn');
+const aiStatusEl    = document.getElementById('aiStatus');
+const aiResultsEl   = document.getElementById('aiResults');
+const aiAddBtn      = document.getElementById('aiAddBtn');
+const aiOverlay     = document.getElementById('aiOverlay');
+const aiVideo       = document.getElementById('aiVideo');
+const aiPhotoScroll = document.getElementById('aiPhotoScroll');
+const aiPhotoImg    = document.getElementById('aiPhotoImg');
+const aiPhotoWrap   = document.getElementById('aiPhotoWrap');
+const aiCropRectEl  = document.getElementById('aiCropRect');
+const aiLiveBar     = document.getElementById('aiLiveBar');
+const aiCropBar     = document.getElementById('aiCropBar');
+const aiModeLabel   = document.getElementById('aiModeLabel');
+
+let aiWords = [];      // {dataUrl, width, height} 切り取った単語画像
+let aiResults = [];    // {dataUrl, width, height, surface, lemma, pos, meaning, mnemonic}
+let aiStream = null;   // AI撮影用カメラのストリーム
+let aiPhotoData = null; // {dataUrl, width, height} 囲む前の元写真
+let aiRect = { x: 0.10, y: 0.34, w: 0.80, h: 0.32 }; // 写真に対する割合(0〜1)
+
+/* ---------- APIキーの保存(端末内のみ) ---------- */
+function aiGetKey(){
+  try{ return localStorage.getItem(AI_KEY_STORAGE) || ''; }catch(e){ return ''; }
+}
+function aiRenderKeyState(){
+  const has = !!aiGetKey();
+  aiApiKeyState.textContent = has
+    ? 'APIキーは保存済みです（この端末の中だけに保存されています）'
+    : 'キーはこの端末の中だけに保存されます（GitHubには送られません）';
+  if(has) aiApiKeyInput.placeholder = '保存済み（変えるときだけ入力）';
+}
+document.getElementById('aiApiKeySaveBtn').addEventListener('click', ()=>{
+  const v = aiApiKeyInput.value.trim();
+  if(!v){ showToast('APIキーを入力してください', true); return; }
+  try{ localStorage.setItem(AI_KEY_STORAGE, v); }catch(e){}
+  aiApiKeyInput.value = '';
+  aiRenderKeyState();
+  showToast('APIキーを保存しました');
+});
+aiRenderKeyState();
+
+/* ---------- AI撮影カメラの開閉 ---------- */
+async function aiOpenCapture(){
+  // メインのカメラが動いていたら止める(同時に2つは使えないため)。
+  // あとで今まで通り「起動」を押せば再開できる
+  if(currentStream){
+    currentStream.getTracks().forEach(t=>t.stop());
+    currentStream = null;
+  }
+  try{ video.srcObject = null; }catch(e){}
+  aiOverlay.classList.add('open');
+  aiShowLive();
+  try{
+    aiStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: 'environment' }
+    });
+    aiVideo.srcObject = aiStream;
+  }catch(e){
+    console.error(e);
+    showToast('カメラを起動できませんでした', true);
+    aiCloseCapture();
+  }
+}
+function aiCloseCapture(){
+  if(aiStream){
+    aiStream.getTracks().forEach(t=>t.stop());
+    aiStream = null;
+  }
+  aiVideo.srcObject = null;
+  aiOverlay.classList.remove('open');
+}
+function aiShowLive(){
+  aiPhotoData = null;
+  aiVideo.style.display = 'block';
+  aiPhotoScroll.style.display = 'none';
+  aiLiveBar.style.display = 'flex';
+  aiCropBar.style.display = 'none';
+  aiModeLabel.textContent = '単語が入るように写真を撮ってください（あとで囲むので、ざっくりでOK）';
+}
+document.getElementById('aiOpenBtn').addEventListener('click', aiOpenCapture);
+document.getElementById('aiCloseBtn').addEventListener('click', aiCloseCapture);
+document.getElementById('aiRetakeBtn').addEventListener('click', aiShowLive);
+
+/* ---------- 撮影(全画面をそのまま撮る) ---------- */
+document.getElementById('aiShootBtn').addEventListener('click', ()=>{
+  if(!aiVideo.videoWidth){ showToast('カメラの準備ができていません', true); return; }
+  let w = aiVideo.videoWidth, h = aiVideo.videoHeight;
+  const MAXD = 1600; // そのまま送ると大きいので、長辺1600pxまでに抑える
+  if(Math.max(w, h) > MAXD){
+    const r = MAXD / Math.max(w, h);
+    w = Math.round(w * r); h = Math.round(h * r);
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(aiVideo, 0, 0, w, h);
+  aiPhotoData = { dataUrl: c.toDataURL('image/jpeg', 0.92), width: w, height: h };
+  aiPhotoImg.src = aiPhotoData.dataUrl;
+  aiRect = { x: 0.10, y: 0.34, w: 0.80, h: 0.32 };
+  aiVideo.style.display = 'none';
+  aiPhotoScroll.style.display = 'block';
+  aiLiveBar.style.display = 'none';
+  aiCropBar.style.display = 'flex';
+  aiModeLabel.textContent = '調べたい単語だけを黄色い枠で囲んでください（枠の中をドラッグで移動、右下の↘で大きさ変更、別の場所を押すと枠を作り直し）';
+  requestAnimationFrame(aiPositionRect);
+  if(navigator.vibrate) navigator.vibrate(40);
+});
+function aiPositionRect(){
+  aiCropRectEl.style.left   = (aiRect.x * 100) + '%';
+  aiCropRectEl.style.top    = (aiRect.y * 100) + '%';
+  aiCropRectEl.style.width  = (aiRect.w * 100) + '%';
+  aiCropRectEl.style.height = (aiRect.h * 100) + '%';
+}
+aiPhotoImg.addEventListener('load', aiPositionRect);
+
+/* ---------- 囲む枠のドラッグ操作 ---------- */
+(function(){
+  let dragMode = null, sx = 0, sy = 0, startRect = null;
+  function frac(e){
+    const r = aiPhotoImg.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  }
+  aiPhotoWrap.addEventListener('pointerdown', (e)=>{
+    if(!aiPhotoData) return;
+    const p = frac(e);
+    sx = p.x; sy = p.y; startRect = { ...aiRect };
+    if(e.target === document.getElementById('aiCropHandle')){
+      dragMode = 'resize';
+    }else if(p.x >= aiRect.x && p.x <= aiRect.x + aiRect.w &&
+             p.y >= aiRect.y && p.y <= aiRect.y + aiRect.h){
+      dragMode = 'move';
+    }else{
+      dragMode = 'new';
+      aiRect = { x: p.x, y: p.y, w: 0.01, h: 0.01 };
+    }
+    try{ aiPhotoWrap.setPointerCapture(e.pointerId); }catch(err){}
+    e.preventDefault();
+  });
+  aiPhotoWrap.addEventListener('pointermove', (e)=>{
+    if(!dragMode || !startRect) return;
+    const p = frac(e);
+    const dx = p.x - sx, dy = p.y - sy;
+    if(dragMode === 'move'){
+      aiRect.x = Math.min(Math.max(startRect.x + dx, 0), 1 - startRect.w);
+      aiRect.y = Math.min(Math.max(startRect.y + dy, 0), 1 - startRect.h);
+    }else if(dragMode === 'resize'){
+      aiRect.w = Math.min(Math.max(startRect.w + dx, 0.06), 1 - aiRect.x);
+      aiRect.h = Math.min(Math.max(startRect.h + dy, 0.04), 1 - aiRect.y);
+    }else if(dragMode === 'new'){
+      aiRect.x = Math.min(sx, p.x); aiRect.y = Math.min(sy, p.y);
+      aiRect.w = Math.abs(p.x - sx); aiRect.h = Math.abs(p.y - sy);
+    }
+    aiPositionRect();
+  });
+  const endDrag = ()=>{ dragMode = null; startRect = null; };
+  aiPhotoWrap.addEventListener('pointerup', endDrag);
+  aiPhotoWrap.addEventListener('pointercancel', endDrag);
+})();
+
+/* ---------- 切り取る ---------- */
+document.getElementById('aiCropBtn').addEventListener('click', ()=>{
+  if(!aiPhotoData) return;
+  const img = new Image();
+  img.onload = ()=>{
+    const sx = Math.round(aiRect.x * aiPhotoData.width);
+    const sy = Math.round(aiRect.y * aiPhotoData.height);
+    const sw = Math.max(8, Math.round(aiRect.w * aiPhotoData.width));
+    const sh = Math.max(8, Math.round(aiRect.h * aiPhotoData.height));
+    const c = document.createElement('canvas');
+    c.width = sw; c.height = sh;
+    c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    aiWords.push({ dataUrl: c.toDataURL('image/jpeg', 0.92), width: sw, height: sh });
+    aiRenderTray();
+    showToast('切り取りました（' + aiWords.length + '語）');
+    if(navigator.vibrate) navigator.vibrate(40);
+    aiShowLive(); // 続けて次の単語を撮れる状態に戻す
+  };
+  img.src = aiPhotoData.dataUrl;
+});
+
+/* ---------- 切り取った単語のトレイ ---------- */
+function aiRenderTray(){
+  aiTrayEl.innerHTML = '';
+  aiWords.forEach((w, i)=>{
+    const d = document.createElement('div');
+    d.className = 'ai-tray-item';
+    const im = document.createElement('img');
+    im.src = w.dataUrl;
+    d.appendChild(im);
+    const b = document.createElement('button');
+    b.textContent = '×';
+    b.setAttribute('aria-label', 'この単語を削除');
+    b.addEventListener('click', ()=>{
+      aiWords.splice(i, 1);
+      aiRenderTray();
+    });
+    d.appendChild(b);
+    aiTrayEl.appendChild(d);
+  });
+  aiTrayCountEl.textContent = aiWords.length;
+  aiLookupBtn.disabled = aiWords.length === 0;
+}
+aiRenderTray();
+
+/* ---------- Claude APIで一括して調べる ---------- */
+const AI_PROMPT = [
+  'あなたは英和辞書です。添付した各画像には、英単語が1つだけ写っています。',
+  '画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
+  '[{"surface":"画像に写っている形そのまま","lemma":"原型","pos":"品詞","meaning":"日本語の意味","mnemonic":"語呂合わせ"}]',
+  'ルール:',
+  '・三人称単数(-s)、過去形・過去分詞(-ed)、複数形、比較級、-ing形などで形が変わっている場合、surfaceには写っている形、lemmaには辞書の見出し語(原型)を入れること。',
+  '・meaningは英和辞典(Weblioなど)のように正確で簡潔に。主要な意味を最大3つまで「、」で区切って入れること。',
+  '・mnemonicは、単語の発音をカタカナで表した音を使い、意味と結びつく短い日本語の語呂合わせを1つ作ること(音の響きと意味の両方を含む、覚えやすい一文)。',
+  '・読み取れない画像がある場合は、その要素のsurfaceを空文字にすること。'
+].join('\n');
+
+async function aiCallApi(batch){
+  const key = aiGetKey();
+  const content = [];
+  batch.forEach((w, i)=>{
+    content.push({ type: 'text', text: '画像' + (i + 1) });
+    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
+  });
+  content.push({ type: 'text', text: AI_PROMPT });
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: content }]
+    })
+  });
+  const data = await res.json().catch(()=>null);
+  if(!res.ok){
+    throw new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
+  }
+  const text = (data.content || []).filter(b=>b.type === 'text').map(b=>b.text).join('');
+  const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+  const arr = JSON.parse(cleaned);
+  if(!Array.isArray(arr)) throw new Error('AIの返答を読み取れませんでした');
+  return arr;
+}
+
+aiLookupBtn.addEventListener('click', async ()=>{
+  if(aiWords.length === 0) return;
+  if(!aiGetKey()){
+    showToast('先にClaude APIキーを保存してください', true);
+    aiApiKeyInput.focus();
+    return;
+  }
+  aiLookupBtn.disabled = true;
+  aiResults = [];
+  aiRenderResults();
+  let done = 0;
+  try{
+    // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)
+    for(let i = 0; i < aiWords.length; i += 8){
+      const batch = aiWords.slice(i, i + 8);
+      aiStatusEl.textContent = 'AIが調べています…（' + done + ' / ' + aiWords.length + '語）';
+      const arr = await aiCallApi(batch);
+      batch.forEach((w, j)=>{
+        const r = arr[j] || {};
+        aiResults.push({
+          dataUrl: w.dataUrl, width: w.width, height: w.height,
+          surface: r.surface || '',
+          lemma: r.lemma || r.surface || '',
+          pos: r.pos || '',
+          meaning: r.meaning || '',
+          mnemonic: r.mnemonic || ''
+        });
+      });
+      done += batch.length;
+      aiRenderResults();
+    }
+    aiStatusEl.textContent = '調べ終わりました。まちがいがあれば直してから「カードに追加」を押してください';
+  }catch(e){
+    console.error(e);
+    aiStatusEl.textContent = 'AIで調べるのに失敗しました：' + (e && e.message ? e.message : '不明なエラー');
+    showToast('AIで調べるのに失敗しました', true);
+  }finally{
+    aiLookupBtn.disabled = aiWords.length === 0;
+  }
+});
+
+/* ---------- 生成結果の確認・編集 ---------- */
+function aiField(labelText, kind, value, onInput){
+  const wrap = document.createElement('div');
+  const lab = document.createElement('label');
+  lab.textContent = labelText;
+  wrap.appendChild(lab);
+  const inp = document.createElement(kind === 'textarea' ? 'textarea' : 'input');
+  if(kind !== 'textarea') inp.type = 'text';
+  inp.value = value || '';
+  inp.addEventListener('input', ()=> onInput(inp.value));
+  wrap.appendChild(inp);
+  return wrap;
+}
+function aiRenderResults(){
+  aiResultsEl.innerHTML = '';
+  aiResults.forEach((r, i)=>{
+    const box = document.createElement('div');
+    box.className = 'ai-result';
+    const head = document.createElement('div');
+    head.className = 'ai-result-head';
+    const im = document.createElement('img');
+    im.src = r.dataUrl;
+    head.appendChild(im);
+    const info = document.createElement('div');
+    info.style.flex = '1';
+    const surf = document.createElement('div');
+    const surfB = document.createElement('b');
+    surfB.textContent = r.surface || '（読み取り失敗）';
+    surf.appendChild(document.createTextNode('写真の形：'));
+    surf.appendChild(surfB);
+    info.appendChild(surf);
+    const del = document.createElement('button');
+    del.className = 'btn-danger';
+    del.textContent = 'この語を削除';
+    del.style.marginTop = '6px';
+    del.addEventListener('click', ()=>{
+      aiResults.splice(i, 1);
+      const wi = aiWords.findIndex(w=>w.dataUrl === r.dataUrl);
+      if(wi >= 0) aiWords.splice(wi, 1);
+      aiRenderTray();
+      aiRenderResults();
+    });
+    info.appendChild(del);
+    head.appendChild(info);
+    box.appendChild(head);
+    box.appendChild(aiField('原型（辞書の見出し語）', 'text', r.lemma, v=>{ r.lemma = v; }));
+    box.appendChild(aiField('日本語の意味', 'textarea', r.meaning, v=>{ r.meaning = v; }));
+    box.appendChild(aiField('ヒント（カタカナ語呂合わせ）', 'text', r.mnemonic, v=>{ r.mnemonic = v; }));
+    aiResultsEl.appendChild(box);
+  });
+  aiAddBtn.style.display = aiResults.length ? '' : 'none';
+}
+
+/* ---------- カード(ショット)として追加 ---------- */
+aiAddBtn.addEventListener('click', ()=>{
+  if(aiResults.length === 0) return;
+  let n = 0;
+  aiResults.forEach(r=>{
+    const lemma = (r.lemma || '').trim();
+    const meaning = (r.meaning || '').trim();
+    if(!lemma && !meaning) return;
+    // 一問一答で表示する答えテキストを組み立てる
+    let answer = lemma;
+    if(r.pos) answer += '（' + r.pos + '）';
+    if(meaning) answer += '\n' + meaning;
+    if(r.surface && lemma && r.surface.toLowerCase() !== lemma.toLowerCase()){
+      answer += '\n（写真の形：' + r.surface + '）';
+    }
+    shots.push({
+      dataUrl: r.dataUrl, width: r.width, height: r.height,
+      mask: { top: 0, bottom: 0, left: 0, right: 0 }, // 答えは写真の中に無いのでマスクは使わない
+      id: makeShotId(),
+      memLevel: 0,
+      hint: (r.mnemonic || '').trim(), // ヒント欄にカタカナ語呂合わせ
+      answerText: answer,              // 一問一答で開く答え(生成した日本語の意味)
+      word: lemma,
+      surface: r.surface || ''
+    });
+    n++;
+  });
+  if(n === 0){ showToast('追加できるカードがありません', true); return; }
+  renderThumbs();
+  aiWords = [];
+  aiResults = [];
+  aiRenderTray();
+  aiRenderResults();
+  aiStatusEl.textContent = '';
+  showToast(n + '枚のAIカードを追加しました');
+  setStatus('AIカードを' + n + '枚追加しました。暗記タブで練習するか、セットとして保存してください');
+});
+
 </script>
 </body>
 </html>
