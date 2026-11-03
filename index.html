@@ -4532,21 +4532,41 @@ async function aiCallApi(batch){
     }
   };
   // モデルの提供状況はアカウントごとに違うため、使えないモデルだったら
-  // 次の候補を自動で試す(先頭がGoogle推奨の最新モデル)
+  // 次の候補を自動で試す(先頭がGoogle推奨の最新モデル)。
+  // 混雑(503)のときは少し待って同じモデルを再試行し、
+  // それでもダメなら次のモデルに切り替える
   const AI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+  const aiSleep = (ms)=> new Promise(r=> setTimeout(r, ms));
   let data = null, lastErr = null;
   for(const mdl of AI_MODELS){
-    try{
-      data = await aiGeminiFetch(key,
-        'https://generativelanguage.googleapis.com/v1beta/models/' + mdl + ':generateContent',
-        bodyObj);
-      break;
-    }catch(e){
-      lastErr = e;
-      if(!/no longer available|not found|not supported|is not available/i.test((e && e.message) || '')) throw e;
+    for(let attempt = 0; attempt < 3 && !data; attempt++){
+      try{
+        data = await aiGeminiFetch(key,
+          'https://generativelanguage.googleapis.com/v1beta/models/' + mdl + ':generateContent',
+          bodyObj);
+      }catch(e){
+        lastErr = e;
+        const msg = (e && e.message) || '';
+        if(/high demand|overloaded|try again later|UNAVAILABLE|\b503\b/i.test(msg)){
+          if(attempt < 2){
+            aiSetStatus('AIが混み合っています。少し待って再試行中…', false);
+            await aiSleep(3000 * (attempt + 1));
+          }
+          continue;
+        }
+        if(/no longer available|not found|not supported|is not available/i.test(msg)) break;
+        throw e;
+      }
     }
+    if(data) break;
   }
-  if(!data) throw lastErr || new Error('使えるモデルがありませんでした');
+  if(!data){
+    const m = (lastErr && lastErr.message) || '';
+    if(/high demand|overloaded|try again later|UNAVAILABLE/i.test(m)){
+      throw new Error('いまAIが混み合っています。1〜2分待ってから、もう一度「AIで意味を調べる」を押してください。');
+    }
+    throw lastErr || new Error('使えるモデルがありませんでした');
+  }
   const cand = (data.candidates || [])[0];
   const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string').map(b=>b.text).join('');
   if(!text) throw new Error('AIの返答が空でした');
