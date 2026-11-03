@@ -1150,12 +1150,13 @@
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
-  <div class="section-label" style="margin-top:10px;">Claude APIキー</div>
+  <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
-    <input type="password" id="aiApiKeyInput" placeholder="sk-ant-..." autocomplete="off">
+    <input type="password" id="aiApiKeyInput" placeholder="AIza..." autocomplete="off">
     <button id="aiApiKeySaveBtn" class="btn-secondary">保存</button>
   </div>
   <div class="sub" id="aiApiKeyState">キーはこの端末の中だけに保存されます（GitHubには送られません）</div>
+  <div class="sub">キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料で作れます（カード登録不要・ずっと¥0）</div>
   <div class="row" style="margin-top:10px;">
     <button id="aiOpenBtn" class="btn-main" style="flex:1">写真を撮って単語を囲む</button>
   </div>
@@ -4102,12 +4103,12 @@ restoreAppSettings();
 renderThumbs();
 
 /* ================= AI単語カード =================
-   写真を撮ってから単語だけを囲んで切り取り、Claude APIに
+   写真を撮ってから単語だけを囲んで切り取り、Gemini API(無料)に
    「読み取り・原型化・日本語の意味・カタカナ語呂合わせ」を
    一括で頼んで、一問一答カード(answerText付きのショット)を
    作る機能。APIキーはこの端末のlocalStorageにだけ保存し、
-   Anthropic APIへのリクエスト以外で外部に送ることはない。 */
-const AI_KEY_STORAGE = 'wordAppClaudeKey';
+   Gemini APIへのリクエスト以外で外部に送ることはない。 */
+const AI_KEY_STORAGE = 'wordAppGeminiKey';
 const aiApiKeyInput = document.getElementById('aiApiKeyInput');
 const aiApiKeyState = document.getElementById('aiApiKeyState');
 const aiTrayEl      = document.getElementById('aiTray');
@@ -4316,7 +4317,7 @@ function aiRenderTray(){
 }
 aiRenderTray();
 
-/* ---------- Claude APIで一括して調べる ---------- */
+/* ---------- Gemini API(無料)で一括して調べる ---------- */
 const AI_PROMPT = [
   'あなたは英和辞書です。添付した各画像には、英単語が1つだけ写っています。',
   '画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
@@ -4330,31 +4331,35 @@ const AI_PROMPT = [
 
 async function aiCallApi(batch){
   const key = aiGetKey();
-  const content = [];
+  const parts = [];
   batch.forEach((w, i)=>{
-    content.push({ type: 'text', text: '画像' + (i + 1) });
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
+    parts.push({ text: '画像' + (i + 1) });
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
   });
-  content.push({ type: 'text', text: AI_PROMPT });
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  parts.push({ text: AI_PROMPT });
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      'x-goog-api-key': key
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 3000,
-      messages: [{ role: 'user', content: content }]
+      contents: [{ parts: parts }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.4,
+        maxOutputTokens: 4096,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     })
   });
   const data = await res.json().catch(()=>null);
   if(!res.ok){
     throw new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
   }
-  const text = (data.content || []).filter(b=>b.type === 'text').map(b=>b.text).join('');
+  const cand = (data.candidates || [])[0];
+  const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string').map(b=>b.text).join('');
+  if(!text) throw new Error('AIの返答が空でした');
   const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
   const arr = JSON.parse(cleaned);
   if(!Array.isArray(arr)) throw new Error('AIの返答を読み取れませんでした');
@@ -4364,7 +4369,7 @@ async function aiCallApi(batch){
 aiLookupBtn.addEventListener('click', async ()=>{
   if(aiWords.length === 0) return;
   if(!aiGetKey()){
-    showToast('先にClaude APIキーを保存してください', true);
+    showToast('先にGemini APIキーを保存してください', true);
     aiApiKeyInput.focus();
     return;
   }
