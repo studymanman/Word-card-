@@ -282,25 +282,30 @@
   }
   .thumb{
     position:relative;
-    background:#000;
+    background:var(--panel);
     border-radius:8px;
     overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .thumb-bar{
+    display:flex;
+    gap:6px;
+    padding:6px;
+    background:var(--panel);
   }
   .thumb img{
     width:100%;
     display:block;
   }
   .thumb .del{
-    position:absolute;
-    top:4px; right:4px;
-    width:28px; height:28px;
-    line-height:28px;
-    text-align:center;
-    background:rgba(0,0,0,0.6);
-    color:#fff;
-    border-radius:50%;
+    flex:0 0 44px;
+    background:transparent;
+    color:var(--danger);
+    border:1px solid var(--danger);
+    border-radius:8px;
     font-size:15px;
-    padding:0;
+    padding:4px 0;
   }
   .empty-note{
     color: var(--text-dim);
@@ -521,6 +526,7 @@
     min-height:0;
     overflow-y:auto;
   }
+  #qaOneWrap{ margin-top:12px; }
   #qaCardWrap{
     position:relative;
     width:100%;
@@ -606,6 +612,7 @@
     background: var(--panel);
     border-radius: var(--radius);
     overflow:hidden;
+    padding:10px;
   }
   .qa-list-item.mem-lvl-2{
     outline: 2px solid var(--accent);
@@ -615,22 +622,32 @@
     outline: 2px solid #d9a441;
     outline-offset: -2px;
   }
-  .qa-num-badge{
-    position:absolute;
-    right:6px; top:6px;
-    background:rgba(0,0,0,0.6);
-    color:#fff;
+  /* 一覧の見出し行: 暗記度ラベルと番号は画像に重ねず、画像の上に置く */
+  .qa-list-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  .qa-list-chip{
     font-size:11px;
     font-weight:700;
-    padding:2px 7px;
+    padding:2px 8px;
     border-radius:10px;
-    z-index:6;
-    pointer-events:none;
+    background:var(--btn-bg);
+    color:var(--text-dim);
   }
+  .qa-list-item.mem-lvl-2 .qa-list-chip{ background:var(--accent); color:var(--accent-text); }
+  .qa-list-item.mem-lvl-1 .qa-list-chip{ background:#d9a441; color:#241a04; }
+  .qa-list-num{ font-size:12px; font-weight:700; color:var(--text-dim); }
+  /* 1枚表示の番号もボタン列の中に置く(画像には重ねない) */
+  .qa-card-num{ flex:0 0 auto; align-self:center; font-size:13px; font-weight:700; color:var(--text-dim); padding:0 2px; }
   .qa-list-imgwrap{
     position:relative;
     width:100%;
     background:#000;
+    border-radius:10px;
+    overflow:hidden;
     cursor:pointer;
     -webkit-tap-highlight-color: transparent;
   }
@@ -644,24 +661,10 @@
     border: 1px dashed var(--text-dim);
     box-sizing:border-box;
   }
-  .qa-list-badge{
-    position:absolute;
-    left:6px; top:6px;
-    background: var(--accent);
-    color:var(--accent-text);
-    font-size:11px;
-    font-weight:700;
-    padding:2px 7px;
-    border-radius:10px;
-    z-index:3;
-    display:none;
-  }
-  .qa-list-item.mem-lvl-2 .qa-list-badge{ display:block; background:var(--accent); color:var(--accent-text); }
-  .qa-list-item.mem-lvl-1 .qa-list-badge{ display:block; background:#d9a441; color:#241a04; }
   .qa-list-actions{
     display:flex;
     gap:6px;
-    padding:6px;
+    padding:10px 0 0;
   }
   .qa-list-actions button{
     flex:1;
@@ -720,16 +723,13 @@
     outline-offset: -2px;
   }
   .hint-btn{
-    position:absolute;
-    top:4px; left:4px;
-    z-index:4;
-    background:rgba(0,0,0,0.6);
-    color:#fff;
+    flex:1;
+    background:var(--btn-bg);
+    color:var(--text);
     border-radius:8px;
-    font-size:11px;
-    padding:3px 6px;
+    font-size:12px;
+    padding:6px 0;
   }
-  .thumb.select-mode .hint-btn{ display:none; }
 
   /* ---- 選択モード時の一括操作バー ---- */
   .bulk-bar{
@@ -1018,9 +1018,9 @@
   .ai-key-row{ display:flex; gap:8px; flex-wrap:wrap; }
   .ai-key-row input{ flex:1; min-width:0; padding:10px 12px; border-radius:10px; border:1px solid rgba(0,0,0,0.18); background:var(--btn-bg, #fff); color:var(--text); font-size:14px; }
   .ai-tray{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
-  .ai-tray-item{ position:relative; width:140px; }
+  .ai-tray-item{ width:140px; display:flex; flex-direction:column; }
   .ai-tray-item img{ width:140px; height:auto; max-height:110px; object-fit:contain; background:#000; border-radius:8px; display:block; border:1px solid rgba(0,0,0,0.15); }
-  .ai-tray-item button{ position:absolute; top:-8px; right:-8px; width:26px; height:26px; border-radius:50%; border:none; background:#c0392b; color:#fff; font-size:14px; line-height:1; padding:0; }
+  .ai-tray-item button{ align-self:flex-end; margin-top:6px; width:40px; height:28px; border-radius:8px; border:1px solid #c0392b; background:transparent; color:#c0392b; font-size:14px; line-height:1; padding:0; }
   .ai-result{ border:1px solid rgba(0,0,0,0.14); border-radius:12px; padding:10px; margin-top:10px; background:var(--panel-soft, rgba(0,0,0,0.03)); }
   .ai-result-head{ display:flex; gap:10px; align-items:flex-start; }
   .ai-result-head img{ width:100px; height:60px; object-fit:cover; border-radius:8px; border:1px solid rgba(0,0,0,0.15); flex:none; }
@@ -1162,7 +1162,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 00:26（ボタン配置の見直し版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 00:40（重なり・密着の全点検版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1358,9 +1358,9 @@
       <div id="qaMaskBottom" class="qa-mask"></div>
       <div id="qaMaskLeft" class="qa-mask"></div>
       <div id="qaMaskRight" class="qa-mask"></div>
-      <div id="qaCardNumBadge" class="qa-num-badge"></div>
     </div>
     <div class="qa-card-actions">
+      <span id="qaCardNumBadge" class="qa-card-num"></span>
       <button id="qaHintBtn">ヒント編集</button>
       <button id="qaMemBtn">暗記済みにする</button>
       <button id="qaDelBtn" class="qa-del-single">削除</button>
@@ -3331,19 +3331,17 @@ function renderQaList(filtered){
     img.src = shot.dataUrl;
     imgWrap.appendChild(img);
 
-    const check = document.createElement('div');
-    check.className = 'select-check';
-    imgWrap.appendChild(check);
-
-    const badge = document.createElement('div');
-    badge.className = 'qa-list-badge';
-    badge.textContent = MEM_LEVEL_LABELS[shot.memLevel];
-    imgWrap.appendChild(badge);
-
-    const numBadge = document.createElement('div');
-    numBadge.className = 'qa-num-badge';
-    numBadge.textContent = '#' + (i + 1);
-    imgWrap.appendChild(numBadge);
+    // 暗記度ラベルと番号は、画像に重ねず見出し行に置く
+    const head = document.createElement('div');
+    head.className = 'qa-list-head';
+    const chip = document.createElement('span');
+    chip.className = 'qa-list-chip';
+    chip.textContent = MEM_LEVEL_LABELS[shot.memLevel];
+    head.appendChild(chip);
+    const num = document.createElement('span');
+    num.className = 'qa-list-num';
+    num.textContent = '#' + (i + 1);
+    head.appendChild(num);
 
     const m = shot.mask || qaPractice.mask || { top:0, bottom:0, left:0, right:50 };
     const revealed = qaListRevealed.has(shot.id);
@@ -3425,6 +3423,7 @@ function renderQaList(filtered){
     actions.appendChild(memBtn);
     actions.appendChild(delBtn);
 
+    item.appendChild(head);
     item.appendChild(imgWrap);
     item.appendChild(hintBox);
     item.appendChild(ansBox);
@@ -3861,9 +3860,9 @@ function renderThumbs(){
     img.src = shot.dataUrl;
     box.appendChild(img);
 
-    const check = document.createElement('div');
-    check.className = 'select-check';
-    box.appendChild(check);
+    // ボタン類は画像に重ねず、画像の下のバーに並べる
+    const bar = document.createElement('div');
+    bar.className = 'thumb-bar';
 
     const hintBtn = document.createElement('button');
     hintBtn.className = 'hint-btn';
@@ -3875,7 +3874,7 @@ function renderThumbs(){
       shot.hint = val.trim();
       renderThumbs();
     });
-    box.appendChild(hintBtn);
+    bar.appendChild(hintBtn);
 
     box.addEventListener('click', ()=>{
       if(!selectMode) return;
@@ -3891,7 +3890,8 @@ function renderThumbs(){
       shots.splice(idx,1);
       renderThumbs();
     });
-    box.appendChild(del);
+    bar.appendChild(del);
+    box.appendChild(bar);
 
     // ---- 並べ替え：カードを長押ししてそのままドラッグすると順番を入れ替えられる ----
     attachThumbDragHandlers(box);
