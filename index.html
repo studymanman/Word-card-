@@ -1152,8 +1152,9 @@
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
-    <input type="password" id="aiApiKeyInput" placeholder="AIza..." autocomplete="off">
+    <input type="password" id="aiApiKeyInput" placeholder="AQ. または AIza で始まるキー" autocomplete="off">
     <button id="aiApiKeySaveBtn" class="btn-secondary">保存</button>
+    <button id="aiApiKeyTestBtn" class="btn-secondary">接続テスト</button>
   </div>
   <div class="sub" id="aiApiKeyState">キーはこの端末の中だけに保存されます（GitHubには送られません）</div>
   <div class="sub">キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料で作れます（カード登録不要・ずっと¥0）</div>
@@ -4329,6 +4330,33 @@ const AI_PROMPT = [
   '・読み取れない画像がある場合は、その要素のsurfaceを空文字にすること。'
 ].join('\n');
 
+/* Gemini APIへの送信。キーの送り方で弾かれる場合があるため、
+   x-goog-api-keyヘッダー → URLパラメータ → Bearer の順に自動で試す */
+async function aiGeminiFetch(key, url, bodyObj){
+  const attempts = [
+    { u: url, h: { 'x-goog-api-key': key } },
+    { u: url + '?key=' + encodeURIComponent(key), h: {} },
+    { u: url, h: { 'Authorization': 'Bearer ' + key } }
+  ];
+  let lastErr = null, lastData = null;
+  for(const a of attempts){
+    const opts = { headers: { 'content-type': 'application/json', ...a.h } };
+    if(bodyObj){
+      opts.method = 'POST';
+      opts.body = JSON.stringify(bodyObj);
+    }
+    const res = await fetch(a.u, opts);
+    const data = await res.json().catch(()=>null);
+    if(res.ok) return data;
+    lastData = data;
+    lastErr = new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
+    const msg = (data && data.error && data.error.message) || '';
+    // キーの「送り方」が原因でないエラー(回数制限など)は試し直しても無駄なので中断
+    if(!/api key not valid|API_KEY_INVALID|invalid api key/i.test(msg)) break;
+  }
+  throw lastErr || new Error('不明なエラー');
+}
+
 async function aiCallApi(batch){
   const key = aiGetKey();
   const parts = [];
@@ -4337,13 +4365,9 @@ async function aiCallApi(batch){
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
   });
   parts.push({ text: AI_PROMPT });
-  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-goog-api-key': key
-    },
-    body: JSON.stringify({
+  const data = await aiGeminiFetch(key,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    {
       contents: [{ parts: parts }],
       generationConfig: {
         responseMimeType: 'application/json',
@@ -4351,12 +4375,7 @@ async function aiCallApi(batch){
         maxOutputTokens: 4096,
         thinkingConfig: { thinkingBudget: 0 }
       }
-    })
-  });
-  const data = await res.json().catch(()=>null);
-  if(!res.ok){
-    throw new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
-  }
+    });
   const cand = (data.candidates || [])[0];
   const text = (((cand && cand.content) || {}).parts || []).filter(b=>typeof b.text === 'string').map(b=>b.text).join('');
   if(!text) throw new Error('AIの返答が空でした');
@@ -4459,6 +4478,23 @@ function aiRenderResults(){
   });
   aiAddBtn.style.display = aiResults.length ? '' : 'none';
 }
+
+
+/* ---------- APIキーの接続テスト ---------- */
+document.getElementById('aiApiKeyTestBtn').addEventListener('click', async ()=>{
+  const key = aiApiKeyInput.value.trim() || aiGetKey();
+  if(!key){ showToast('先にAPIキーを入力してください', true); return; }
+  aiApiKeyState.textContent = '接続テスト中…';
+  try{
+    await aiGeminiFetch(key, 'https://generativelanguage.googleapis.com/v1beta/models', null);
+    aiApiKeyState.textContent = '接続OK：このキーは有効です';
+    showToast('接続OK：キーは有効です');
+  }catch(e){
+    console.error(e);
+    aiApiKeyState.textContent = '接続NG：' + (e && e.message ? e.message : '不明なエラー');
+    showToast('接続できませんでした', true);
+  }
+});
 
 /* ---------- カード(ショット)として追加 ---------- */
 aiAddBtn.addEventListener('click', ()=>{
