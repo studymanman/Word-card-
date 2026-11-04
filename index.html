@@ -1213,7 +1213,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 17:20（保存済みセットのシャッフル・変換の導線 追加版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 17:32（PDF設定を保存済みタブへ＋ボタン整理版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1315,6 +1315,34 @@
 </div><!-- /tab-page: study -->
 
 <div class="tab-page" data-tab="saved">
+
+<!-- ===== PDF設定(保存済みセットの書き出し用) =====
+     白黒(インク節約)・用紙・列数は、もともと出力タブにしか無かったため、
+     保存済みセットを書き出すときにタブを行き来する必要があった。
+     ここにも同じ設定を置き、出力タブ側と常に同期させる -->
+<div class="panel">
+  <div class="section-label">PDF設定（保存済みセットの書き出しにも効きます）</div>
+  <div class="row">
+    <select id="pageSizeSaved">
+      <option value="a4">A4で作る</option>
+      <option value="a5">A5で作る</option>
+    </select>
+  </div>
+  <div class="row" style="align-items:center;">
+    <span class="custom-slider-label" style="width:auto;">列数</span>
+    <button id="colsMinusSaved" class="btn-secondary" style="flex:0 0 44px;">－</button>
+    <input type="number" id="layoutColsSaved" min="1" max="8" value="2" readonly
+           style="width:56px; text-align:center; background:var(--btn-bg); color:var(--text); border:none; border-radius:10px; font-size:15px; padding:8px 0;">
+    <button id="colsPlusSaved" class="btn-secondary" style="flex:0 0 44px;">＋</button>
+    <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
+  </div>
+  <div class="row" style="align-items:center;">
+    <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;">
+      <input type="checkbox" id="inkSaveChkSaved" style="width:20px; height:20px;">
+      白黒にする（印刷インク節約：地を白く飛ばし、文字を薄くする）
+    </label>
+  </div>
+</div>
 
 <!-- ===== フォルダ／セットの一覧 =====
      最初はフォルダの一覧だけを表示し、開きたいフォルダを押すと
@@ -1447,9 +1475,7 @@
       <button id="qaSelectModeBtn" class="btn-toggle">カードを選択する</button>
       <button id="qaShuffleBtn" class="btn-toggle">シャッフル</button>
       <button id="qaWeakFirstBtn" class="btn-toggle">苦手なものを先に</button>
-    </div>
-    <div class="qa-sub-row">
-      <button id="qaConvBtn" class="btn-toggle" style="flex:1">文字カードに変換（写真の英・日を読み取る）</button>
+      <button id="qaConvBtn" class="btn-toggle">文字変換</button>
     </div>
     <div class="sub" style="text-align:center; margin-top:2px;">キーボード：Space/Enterで表裏、←→で移動、1〜3で暗記度</div>
     <div id="qaBulkBar" class="bulk-bar">
@@ -2051,17 +2077,36 @@ deleteTemplateBtn.addEventListener('click', ()=>{
 refreshTemplateSelect(); // ページを開いた時点で保存済みテンプレート一覧を表示
 
 /* ---------- PDFの列数を自由に選べるステッパー(1〜8列) ---------- */
-colsMinus.addEventListener('click', ()=>{
-  const v = Math.max(1, parseInt(layoutColsSel.value,10) - 1);
+function setLayoutCols(v){
+  v = Math.max(1, Math.min(8, parseInt(v, 10) || 1));
   layoutColsSel.value = v;
+  const mir = document.getElementById('layoutColsSaved');
+  if(mir) mir.value = v;
   saveAppSetting('cols', v);
+}
+colsMinus.addEventListener('click', ()=> setLayoutCols(parseInt(layoutColsSel.value,10) - 1));
+colsPlus.addEventListener('click', ()=> setLayoutCols(parseInt(layoutColsSel.value,10) + 1));
+pageSizeSel.addEventListener('change', ()=>{
+  saveAppSetting('pageSize', pageSizeSel.value);
+  const mir = document.getElementById('pageSizeSaved');
+  if(mir) mir.value = pageSizeSel.value;
 });
-colsPlus.addEventListener('click', ()=>{
-  const v = Math.min(8, parseInt(layoutColsSel.value,10) + 1);
-  layoutColsSel.value = v;
-  saveAppSetting('cols', v);
-});
-pageSizeSel.addEventListener('change', ()=> saveAppSetting('pageSize', pageSizeSel.value));
+
+/* 保存済みタブ側のPDF設定(出力タブと同期する鏡) */
+const pageSizeSavedSel = document.getElementById('pageSizeSaved');
+if(pageSizeSavedSel){
+  pageSizeSavedSel.value = pageSizeSel.value;
+  pageSizeSavedSel.addEventListener('change', ()=>{
+    pageSizeSel.value = pageSizeSavedSel.value;
+    saveAppSetting('pageSize', pageSizeSel.value);
+  });
+}
+const layoutColsSavedInit = document.getElementById('layoutColsSaved');
+if(layoutColsSavedInit) layoutColsSavedInit.value = layoutColsSel.value;
+const colsMinusSavedBtn = document.getElementById('colsMinusSaved');
+if(colsMinusSavedBtn) colsMinusSavedBtn.addEventListener('click', ()=> setLayoutCols(parseInt(layoutColsSel.value,10) - 1));
+const colsPlusSavedBtn = document.getElementById('colsPlusSaved');
+if(colsPlusSavedBtn) colsPlusSavedBtn.addEventListener('click', ()=> setLayoutCols(parseInt(layoutColsSel.value,10) + 1));
 
 /* ---------- 一問一答：隠す範囲(マスク)機能 ----------
    ONにすると、カメラ枠のふちに白いつまみが出てくる。
@@ -2658,43 +2703,70 @@ async function renderDeckList(){
         openQaViewer(d.name, d.shots, d.mask, d);
       });
 
-      const convBtn = document.createElement('button');
-      convBtn.className = 'btn-secondary';
-      convBtn.textContent = '文字変換';
-      convBtn.addEventListener('click', (e)=>{
-        e.stopPropagation();
-        openConvOverlay(d.name, d.shots, d);
-      });
-
-      const shuffleBtn = document.createElement('button');
-      shuffleBtn.className = 'btn-secondary';
-      shuffleBtn.textContent = 'シャッフル';
-      shuffleBtn.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        if(d.shots.length < 2) return;
-        if(!confirm('セット「' + d.name + '」のカードの順番をシャッフルします。シャッフルした順番で保存されます（PDFもその順番になります）。よろしいですか？')) return;
-        for(let i = d.shots.length - 1; i > 0; i--){
-          const j = Math.floor(Math.random() * (i + 1));
-          [d.shots[i], d.shots[j]] = [d.shots[j], d.shots[i]];
+      /* よく使う「練習」「書き出す」だけをボタンとして残し、それ以外は
+         「その他」メニューにまとめる(ボタンが増えてごちゃつくのを防ぐ) */
+      const deckMoreActions = {
+        conv: ()=>{ openConvOverlay(d.name, d.shots, d); },
+        shuffle: async ()=>{
+          if(d.shots.length < 2) return;
+          if(!confirm('セット「' + d.name + '」のカードの順番をシャッフルします。シャッフルした順番で保存されます（PDFもその順番になります）。よろしいですか？')) return;
+          for(let i = d.shots.length - 1; i > 0; i--){
+            const j = Math.floor(Math.random() * (i + 1));
+            [d.shots[i], d.shots[j]] = [d.shots[j], d.shots[i]];
+          }
+          await saveDeckToStorage(d);
+          showToast('「' + d.name + '」をシャッフルしました');
+          setStatus('セット「' + d.name + '」のカードをシャッフルして保存しました');
+        },
+        move: async ()=>{
+          const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
+          if(target === null) return;
+          d.folder = target;
+          await saveDeckToStorage(d);
+          await refreshFolderSelect();
+          await renderDeckList();
+          setStatus('セット「' + d.name + '」を移動しました');
+        },
+        rename: async ()=>{
+          const newName = prompt('セットの新しい名前を入力してください', d.name);
+          if(newName === null) return;
+          const trimmed = newName.trim();
+          if(!trimmed || trimmed === d.name) return;
+          const list = await loadDecks();
+          if(list.some(x => x.name === trimmed)){
+            setStatus('同じ名前のセットがすでにあります', true);
+            return;
+          }
+          // セットは名前がキーなので、新しい名前で保存してから古い名前を消す
+          await saveDeckToStorage({ ...d, name: trimmed });
+          await deleteDeckFromStorage(d.name);
+          deckListCache = deckListCache.map(x => x.name === d.name ? { ...x, name: trimmed } : x);
+          await renderDeckList();
+          setStatus('セット名を「' + trimmed + '」に変更しました');
+        },
+        dup: async ()=>{
+          const list = await loadDecks();
+          let candidate = d.name + ' のコピー';
+          let n = 2;
+          while(list.some(x => x.name === candidate)){
+            candidate = d.name + ' のコピー' + n;
+            n++;
+          }
+          const copy = JSON.parse(JSON.stringify(d));
+          copy.name = candidate;
+          // カードのIDは重複しないよう振り直す(読み込み時のマージで別カードとして扱われるように)
+          copy.shots = (copy.shots || []).map(s => ({ ...s, id: makeShotId() }));
+          await saveDeckToStorage(copy);
+          await renderDeckList();
+          setStatus('セット「' + candidate + '」を複製しました');
+        },
+        del: async ()=>{
+          if(!confirm('セット「' + d.name + '」を削除します。よろしいですか？')) return;
+          await deleteDeckFromStorage(d.name);
+          await renderDeckList();
+          setStatus('セット「' + d.name + '」を削除しました');
         }
-        await saveDeckToStorage(d);
-        showToast('「' + d.name + '」をシャッフルしました');
-        setStatus('セット「' + d.name + '」のカードをシャッフルして保存しました');
-      });
-
-      const moveBtn = document.createElement('button');
-      moveBtn.className = 'btn-secondary';
-      moveBtn.textContent = '移動';
-      moveBtn.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        const target = await pickFromList('移動先のフォルダを選んでください', await folderPickOptions());
-        if(target === null) return;
-        d.folder = target;
-        await saveDeckToStorage(d);
-        await refreshFolderSelect();
-        await renderDeckList();
-        setStatus('セット「' + d.name + '」を移動しました');
-      });
+      };
 
       // このセット(ファイル)1個だけを書き出す。形式はピッカーで選ぶ：
       // PDF／画像(ZIP)は印刷や共有用、データ(JSON)は端末間の引き継ぎ用
@@ -2728,68 +2800,25 @@ async function renderDeckList(){
         }
       });
 
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn-danger';
-      delBtn.textContent = '削除';
-      delBtn.addEventListener('click', async (e)=>{
+      const moreBtn = document.createElement('button');
+      moreBtn.className = 'btn-secondary';
+      moreBtn.textContent = 'その他';
+      moreBtn.addEventListener('click', async (e)=>{
         e.stopPropagation();
-        if(!confirm('セット「' + d.name + '」を削除します。よろしいですか？')) return;
-        await deleteDeckFromStorage(d.name);
-        await renderDeckList();
-        setStatus('セット「' + d.name + '」を削除しました');
-      });
-
-      const renameBtn = document.createElement('button');
-      renameBtn.className = 'btn-secondary';
-      renameBtn.textContent = '名前変更';
-      renameBtn.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        const newName = prompt('セットの新しい名前を入力してください', d.name);
-        if(newName === null) return;
-        const trimmed = newName.trim();
-        if(!trimmed || trimmed === d.name) return;
-        const list = await loadDecks();
-        if(list.some(x => x.name === trimmed)){
-          setStatus('同じ名前のセットがすでにあります', true);
-          return;
-        }
-        // セットは名前がキーなので、新しい名前で保存してから古い名前を消す
-        await saveDeckToStorage({ ...d, name: trimmed });
-        await deleteDeckFromStorage(d.name);
-        deckListCache = deckListCache.map(x => x.name === d.name ? { ...x, name: trimmed } : x);
-        await renderDeckList();
-        setStatus('セット名を「' + trimmed + '」に変更しました');
-      });
-
-      const dupBtn = document.createElement('button');
-      dupBtn.className = 'btn-secondary';
-      dupBtn.textContent = '複製';
-      dupBtn.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        const list = await loadDecks();
-        let candidate = d.name + ' のコピー';
-        let n = 2;
-        while(list.some(x => x.name === candidate)){
-          candidate = d.name + ' のコピー' + n;
-          n++;
-        }
-        const copy = JSON.parse(JSON.stringify(d));
-        copy.name = candidate;
-        // カードのIDは重複しないよう振り直す(読み込み時のマージで別カードとして扱われるように)
-        copy.shots = (copy.shots || []).map(s => ({ ...s, id: makeShotId() }));
-        await saveDeckToStorage(copy);
-        await renderDeckList();
-        setStatus('セット「' + candidate + '」を複製しました');
+        const act = await pickFromList('「' + d.name + '」の操作を選んでください', [
+          { label:'文字カードに変換', value:'conv' },
+          { label:'シャッフル', value:'shuffle' },
+          { label:'別フォルダへ移動', value:'move' },
+          { label:'名前変更', value:'rename' },
+          { label:'複製', value:'dup' },
+          { label:'削除', value:'del' }
+        ]);
+        if(act && deckMoreActions[act]) deckMoreActions[act]();
       });
 
       actions.appendChild(practiceBtn);
-      actions.appendChild(convBtn);
-      actions.appendChild(shuffleBtn);
-      actions.appendChild(moveBtn);
       actions.appendChild(exportBtn);
-      actions.appendChild(renameBtn);
-      actions.appendChild(dupBtn);
-      actions.appendChild(delBtn);
+      actions.appendChild(moreBtn);
       row.appendChild(actions);
     }
 
@@ -4096,15 +4125,23 @@ resetBtn.addEventListener('click', ()=>{
    用意しておき、PDF作成時はそれを使う。作成処理そのものは
    今まで通り同期のまま(事前に用意するだけ) */
 const inkSaveChk = document.getElementById('inkSaveChk');
+const inkSaveChkSaved = document.getElementById('inkSaveChkSaved');
 const inkCache = new Map();
 let inkSaveOn = !!loadAppSettings().inkSave;
+function setInkSave(on){
+  inkSaveOn = on;
+  if(inkSaveChk) inkSaveChk.checked = on;
+  if(inkSaveChkSaved) inkSaveChkSaved.checked = on;
+  saveAppSetting('inkSave', on);
+  if(on) prepareInkImages();
+}
 if(inkSaveChk){
   inkSaveChk.checked = inkSaveOn;
-  inkSaveChk.addEventListener('change', ()=>{
-    inkSaveOn = inkSaveChk.checked;
-    saveAppSetting('inkSave', inkSaveOn);
-    if(inkSaveOn) prepareInkImages();
-  });
+  inkSaveChk.addEventListener('change', ()=> setInkSave(inkSaveChk.checked));
+}
+if(inkSaveChkSaved){
+  inkSaveChkSaved.checked = inkSaveOn;
+  inkSaveChkSaved.addEventListener('change', ()=> setInkSave(inkSaveChkSaved.checked));
 }
 function inkProcessImage(dataUrl){
   return new Promise((resolve)=>{
@@ -4510,6 +4547,10 @@ function restoreAppSettings(){
   const s = loadAppSettings();
   if(s.pageSize) pageSizeSel.value = s.pageSize;
   if(s.cols) layoutColsSel.value = Math.max(1, Math.min(8, parseInt(s.cols, 10) || 2));
+  const mirSize = document.getElementById('pageSizeSaved');
+  if(mirSize) mirSize.value = pageSizeSel.value;
+  const mirCols = document.getElementById('layoutColsSaved');
+  if(mirCols) mirCols.value = layoutColsSel.value;
   if(s.customW) customWidthSlider.value = s.customW;
   if(s.customH) customHeightSlider.value = s.customH;
   if(s.size){
