@@ -1242,7 +1242,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-05 00:35（文字版は自動作成＋練習で写真／文字版を選べる版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-05 00:45（手書き訳の読み取り対応＋自動作成中は画面を眠らせない版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -5055,7 +5055,7 @@ function aiRenderResults(){
    文字化は、この場でAIに写真の英語と日本語を読ませて文字の行にする
    (カード自体には保存しない)。白黒は、この場で印刷用画像を用意する */
 const TEXT_READ_PROMPT = [
-  'あなたは単語帳の読み取りの専門家です。添付した各画像は単語カードで、単語帳の1項目(英語とその日本語の意味)が写っています。写真はきっちり切り取られていないことが多く、隣の項目の一部が見切れて入っていたり、品詞の印や記号が写っていたりします。',
+  'あなたは単語帳の読み取りの専門家です。添付した各画像は単語カードで、単語帳の1項目(英語とその日本語の意味)が写っています。日本語の意味が手書きで書かれているカードもあります(その場合、手書きの文字が訳そのものです)。写真はきっちり切り取られていないことが多く、隣の項目の一部が見切れて入っていたり、品詞の印や記号が写っていたりします。',
   '各画像について「主役の1項目だけ」を読み取り、画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
   '[{"en":"英語","ja":"日本語の意味"}]',
   'en に入れるもの: 主項目の英語(単語・熟語)だけ。',
@@ -5066,7 +5066,7 @@ const TEXT_READ_PROMPT = [
   '・隣の項目の見切れた断片(端に少しだけ写っている別の単語や意味)',
   '・ページ番号や見出しなどの、項目の内容ではない印刷要素',
   '・丸や線などの、手書きの印そのもの',
-  '手書きについて: 手書きの書き込みも読み取ること。意味の補足として書かれている手書きは、ja に含めること。',
+  '手書きについて: 手書きの文字も、印刷された文字とまったく同じように読み取ること(訳が手書きのカードでは、手書きこそが読み取り対象)。丸や線などの印だけは除くこと。',
   '知識の使い方: 断片が主項目のものかどうか迷う場合は、その英語の実際の意味の知識と照らして判断すること。ただし、画像に写っていない意味を創作してはいけない。',
   '意味の文言は、並び替えたり言い換えたりせず、写っている通りに書き写すこと。読み取れない場合は空文字にすること。'
 ].join('\n');
@@ -5187,6 +5187,28 @@ async function startPdfExport(sections, filename){
    アプリを開いている間だけ動く(閉じている間は進まない)ので、
    途中で閉じても、次に開いたときに残りから自動で続く */
 let bgConvRunning = false;
+/* 自動作成の間だけ画面を起こし続ける(対応している端末のみ)。
+   画面が消えるとiOSに止められてしまうため、開いたまま置いておけば
+   最後まで進むようにするための工夫。それでも、別のアプリに切り替える
+   と止まるのは Web アプリの仕様どおり(次に開いたときに再開する) */
+let wakeLockObj = null;
+async function acquireWakeLock(){
+  try{
+    if('wakeLock' in navigator && !wakeLockObj){
+      wakeLockObj = await navigator.wakeLock.request('screen');
+      wakeLockObj.addEventListener('release', ()=>{ wakeLockObj = null; });
+    }
+  }catch(e){ /* 非対応・失敗しても処理は続ける */ }
+}
+function releaseWakeLock(){
+  try{
+    if(wakeLockObj){ wakeLockObj.release(); wakeLockObj = null; }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && bgConvRunning) acquireWakeLock();
+});
+
 async function kickBgTextConvert(){
   if(bgConvRunning) return;
   if(!aiGetKey()) return;
@@ -5200,6 +5222,7 @@ async function kickBgTextConvert(){
       if(t.length){ jobs.push({ deck: d, targets: t }); total += t.length; }
     });
     if(total === 0) return;
+    acquireWakeLock();
     let done = 0, failed = 0;
     showPdfProg('文字版カードを裏で作っています…（0 / ' + total + '枚）');
     for(const job of jobs){
@@ -5245,6 +5268,7 @@ async function kickBgTextConvert(){
     console.error(e);
     hidePdfProg();
   }finally{
+    releaseWakeLock();
     bgConvRunning = false;
   }
 }
