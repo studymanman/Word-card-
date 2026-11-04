@@ -1213,7 +1213,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 17:15（セット別見出し＋文字カード変換 追加版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 17:20（保存済みセットのシャッフル・変換の導線 追加版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1448,6 +1448,9 @@
       <button id="qaShuffleBtn" class="btn-toggle">シャッフル</button>
       <button id="qaWeakFirstBtn" class="btn-toggle">苦手なものを先に</button>
     </div>
+    <div class="qa-sub-row">
+      <button id="qaConvBtn" class="btn-toggle" style="flex:1">文字カードに変換（写真の英・日を読み取る）</button>
+    </div>
     <div class="sub" style="text-align:center; margin-top:2px;">キーボード：Space/Enterで表裏、←→で移動、1〜3で暗記度</div>
     <div id="qaBulkBar" class="bulk-bar">
       <button id="qaBulkSelectAllBtn" class="btn-secondary">全部選択</button>
@@ -1473,6 +1476,7 @@
   </div>
   <div class="row" style="margin-top:10px;">
     <button id="convRunBtn" class="btn-main" style="flex:1">AIで読み取る</button>
+    <button id="convShuffleBtn" class="btn-secondary" style="flex:1">シャッフル</button>
     <button id="convCloseBtn" class="btn-danger" style="flex:1">閉じる（保存）</button>
   </div>
 </div>
@@ -2662,6 +2666,22 @@ async function renderDeckList(){
         openConvOverlay(d.name, d.shots, d);
       });
 
+      const shuffleBtn = document.createElement('button');
+      shuffleBtn.className = 'btn-secondary';
+      shuffleBtn.textContent = 'シャッフル';
+      shuffleBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(d.shots.length < 2) return;
+        if(!confirm('セット「' + d.name + '」のカードの順番をシャッフルします。シャッフルした順番で保存されます（PDFもその順番になります）。よろしいですか？')) return;
+        for(let i = d.shots.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [d.shots[i], d.shots[j]] = [d.shots[j], d.shots[i]];
+        }
+        await saveDeckToStorage(d);
+        showToast('「' + d.name + '」をシャッフルしました');
+        setStatus('セット「' + d.name + '」のカードをシャッフルして保存しました');
+      });
+
       const moveBtn = document.createElement('button');
       moveBtn.className = 'btn-secondary';
       moveBtn.textContent = '移動';
@@ -2764,6 +2784,7 @@ async function renderDeckList(){
 
       actions.appendChild(practiceBtn);
       actions.appendChild(convBtn);
+      actions.appendChild(shuffleBtn);
       actions.appendChild(moveBtn);
       actions.appendChild(exportBtn);
       actions.appendChild(renameBtn);
@@ -3362,6 +3383,15 @@ qaShuffleBtn.addEventListener('click', ()=>{
   afterQaMutation();
   renderQaAll();
   setStatus('カードの順番をシャッフルしました');
+});
+
+/* ---------- 練習画面から文字カード変換を開く ----------
+   保存済みセットを練習で開いているときは、そのセットのカードが
+   そのまま変換の対象になり、閉じるときにセットへ保存される */
+document.getElementById('qaConvBtn').addEventListener('click', ()=>{
+  if(qaPractice.shots.length === 0) return;
+  const title = qaPractice.deckRecord ? qaPractice.deckRecord.name : '今の写真';
+  openConvOverlay(title, qaPractice.shots, qaPractice.deckRecord);
 });
 
 /* ---------- 苦手優先(未暗記／うろ覚えのカードを前のほうに集める) ----------
@@ -5198,11 +5228,25 @@ convRunBtn.addEventListener('click', async ()=>{
   }
 });
 
+document.getElementById('convShuffleBtn').addEventListener('click', async ()=>{
+  if(!convTarget || convTarget.shots.length < 2) return;
+  const arr = convTarget.shots;
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  convRenderList();
+  await convSaveIfDeck();
+  convStatusEl.textContent = 'カードの順番をシャッフルしました（PDFもこの順番になります）';
+  showToast('シャッフルしました');
+});
+
 convCloseBtn.addEventListener('click', async ()=>{
   await convSaveIfDeck();
   convOverlayEl.classList.remove('open');
   convTarget = null;
   renderThumbs();
+  if(qaViewer.style.display === 'flex') renderQaAll();
 });
 
 document.getElementById('convOpenBtn').addEventListener('click', ()=>{
