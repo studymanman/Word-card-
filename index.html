@@ -526,6 +526,54 @@
     min-height:0;
     overflow-y:auto;
   }
+  /* ---- 文字カード変換：編集画面(全画面) ---- */
+  #convOverlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:var(--bg);
+    z-index:60;
+    padding:16px max(16px, calc((100% - 700px) / 2)) 12px;
+    flex-direction:column;
+  }
+  #convOverlay.open{ display:flex; }
+  #convScroll{ flex:1 1 auto; min-height:0; overflow-y:auto; }
+  .conv-badge{
+    display:inline-block;
+    font-size:12px;
+    padding:2px 10px;
+    border-radius:999px;
+    background:var(--accent);
+    color:var(--accent-text);
+  }
+  .conv-badge.photo{ background:var(--text-dim); }
+  /* ---- 一問一答で文字カードを表示する面 ---- */
+  .qa-text-card{
+    background:var(--panel);
+    border:1px solid rgba(0,0,0,0.16);
+    border-radius: var(--radius);
+    padding:22px 18px;
+    margin-top:12px;
+    font-size:26px;
+    font-weight:700;
+    text-align:center;
+    color:var(--text);
+    word-break:break-word;
+    cursor:pointer;
+  }
+  .qa-list-text{
+    background:var(--panel);
+    padding:16px 14px;
+    font-size:19px;
+    font-weight:700;
+    text-align:center;
+    color:var(--text);
+    word-break:break-word;
+    min-height:54px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
   #qaOneWrap{ margin-top:12px; }
   #qaCardWrap{
     position:relative;
@@ -1148,6 +1196,9 @@
   <div class="row">
     <button id="goExportBtn" class="btn-main" disabled>この写真でPDFを作る（出力タブへ）</button>
   </div>
+  <div class="row">
+    <button id="convOpenBtn" class="btn-secondary" style="flex:1">文字カードに変換／編集（写真の英・日を読み取る）</button>
+  </div>
   <div id="bulkBar" class="bulk-bar">
     <button id="bulkSelectAllBtn" class="btn-secondary">全部選択</button>
     <button id="bulkSelectNoneBtn" class="btn-secondary">選択解除</button>
@@ -1162,7 +1213,7 @@
 
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 00:52（インク節約モード追加版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 17:15（セット別見出し＋文字カード変換 追加版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1215,6 +1266,7 @@
       印刷インク節約（写真の地を白く飛ばし、文字を薄くする）
     </label>
   </div>
+  <div class="sub">文字カードに変換したカードは、写真の代わりに「全部同じ大きさ・同じ位置の文字の行」で印刷されます。複数セットをまとめたPDFでは、セットごとに新しいページと見出しが付きます。</div>
   <div class="row">
     <button id="pdfBtn" class="btn-main" disabled>PDFを作成してダウンロード</button>
   </div>
@@ -1365,6 +1417,7 @@
       <div id="qaMaskLeft" class="qa-mask"></div>
       <div id="qaMaskRight" class="qa-mask"></div>
     </div>
+    <div id="qaTextCard" class="qa-text-card" style="display:none;"></div>
     <div class="qa-card-actions">
       <span id="qaCardNumBadge" class="qa-card-num"></span>
       <button id="qaHintBtn">ヒント編集</button>
@@ -1407,6 +1460,20 @@
       <button id="qaSaveOrderBtn" class="btn-secondary" style="flex:1" disabled>並び替えを保存</button>
       <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== 文字カード変換：編集画面(全画面) ===== -->
+<div id="convOverlay">
+  <div id="convScroll">
+    <h1 id="convTitle">文字カードに変換</h1>
+    <div class="sub">写真の中の英語と日本語をAIが読み取り、全部同じ大きさの「文字の行」にします。PDFでは写真の代わりにこの文字が印刷されるので、大きさがそろって、紙のシートで隠しながらずらしていく勉強がしやすくなります。読み取りが違っていたら、その場で直してください（写真は消えずに残るので、いつでも写真に戻せます）。</div>
+    <div class="sub" id="convStatus" style="margin-top:8px;"></div>
+    <div id="convList"></div>
+  </div>
+  <div class="row" style="margin-top:10px;">
+    <button id="convRunBtn" class="btn-main" style="flex:1">AIで読み取る</button>
+    <button id="convCloseBtn" class="btn-danger" style="flex:1">閉じる（保存）</button>
   </div>
 </div>
 
@@ -2480,10 +2547,10 @@ deckBulkPdfBtn.addEventListener('click', ()=>{
   if(selectedDeckNames.size === 0) return;
   const targets = deckListCache.filter(d => selectedDeckNames.has(d.name));
   if(targets.length === 0) return;
-  const allShots = [];
-  targets.forEach(d => d.shots.forEach(s => allShots.push(s)));
-  const ok = buildAndDownloadPdfForShots(allShots, '選んだセット（' + targets.length + '個）.pdf');
-  if(ok) setStatus('選んだ' + targets.length + '個のセットを1つのPDFにまとめました（全' + allShots.length + '枚）');
+  const totalShots = targets.reduce((n, d)=> n + d.shots.length, 0);
+  const sections = targets.map(d => ({ title: d.name, shots: d.shots }));
+  const ok = buildPdfSections(sections, '選んだセット（' + targets.length + '個）.pdf');
+  if(ok) setStatus('選んだ' + targets.length + '個のセットを1つのPDFにまとめました（全' + totalShots + '枚・セットごとに新しいページと見出し付き）');
 });
 
 /* 選んだセットの画像を、セットごとのフォルダに分けて1つのZIPにする */
@@ -2587,6 +2654,14 @@ async function renderDeckList(){
         openQaViewer(d.name, d.shots, d.mask, d);
       });
 
+      const convBtn = document.createElement('button');
+      convBtn.className = 'btn-secondary';
+      convBtn.textContent = '文字変換';
+      convBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openConvOverlay(d.name, d.shots, d);
+      });
+
       const moveBtn = document.createElement('button');
       moveBtn.className = 'btn-secondary';
       moveBtn.textContent = '移動';
@@ -2688,6 +2763,7 @@ async function renderDeckList(){
       });
 
       actions.appendChild(practiceBtn);
+      actions.appendChild(convBtn);
       actions.appendChild(moveBtn);
       actions.appendChild(exportBtn);
       actions.appendChild(renameBtn);
@@ -2716,7 +2792,9 @@ saveDeckBtn.addEventListener('click', async ()=>{
       memLevel: typeof s.memLevel === 'number' ? s.memLevel : (s.memorized ? 2 : 0),
       hint: s.hint || '',
       // AIカードの答え(生成した日本語の意味)も落とさずに保存する
-      ...(s.answerText ? { answerText: s.answerText, word: s.word || '', surface: s.surface || '' } : {})
+      ...(s.answerText ? { answerText: s.answerText, word: s.word || '', surface: s.surface || '' } : {}),
+      // 文字カード変換の結果(英語・日本語テキスト)も落とさずに保存する
+      ...(s.textEn || s.textJa ? { textEn: s.textEn || '', textJa: s.textJa || '' } : {})
     }))
   };
 
@@ -2967,6 +3045,16 @@ function renderQaCard(filtered){
   const shot = qaPractice.shots[masterIdx];
   qaCardWrap.dataset.masterIdx = masterIdx;
   qaCardImg.src = shot.dataUrl;
+  const qaTextCardEl = document.getElementById('qaTextCard');
+  const qaIsTextCard = !!((shot.textEn || '').trim() || (shot.textJa || '').trim());
+  if(qaIsTextCard){
+    qaCardWrap.style.display = 'none';
+    qaTextCardEl.style.display = 'block';
+    qaTextCardEl.textContent = (shot.textEn || '').trim();
+  }else{
+    qaCardWrap.style.display = '';
+    qaTextCardEl.style.display = 'none';
+  }
   // 画像が大きすぎる問題への対処: 表示幅は「画面に収まる範囲」かつ
   // 「元の大きさの1.5倍まで」に抑える。小さい単語の切り取りを
   // 画面いっぱいに引き伸ばさない
@@ -3001,11 +3089,14 @@ function applyQaMaskVisibility(shot){
   // AIカード(答えが生成テキスト)は写真の中に答えが無いのでマスクは使わず、
   // 代わりに下の答え欄で意味の表示/非表示を切り替える
   const ansBox = document.getElementById('qaAnswerBox');
-  if(shot && shot.answerText){
+  const qaAnswerText = shot
+    ? (shot.answerText || (((shot.textEn || '').trim() || (shot.textJa || '').trim()) ? (shot.textJa || '') : ''))
+    : '';
+  if(shot && qaAnswerText){
     [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{ el.style.display = 'none'; });
     if(ansBox){
       ansBox.style.display = 'block';
-      ansBox.textContent = qaRevealed ? shot.answerText : 'タップで意味を表示';
+      ansBox.textContent = qaRevealed ? qaAnswerText : 'タップで意味を表示';
       ansBox.classList.toggle('locked', !qaRevealed);
     }
   }else if(ansBox){
@@ -3027,6 +3118,11 @@ let qaSuppressClick = false;
 qaCardWrap.addEventListener('click', (e)=>{
   if(qaSuppressClick){ qaSuppressClick = false; return; }
   if(e.target.closest('.qa-card-actions')) return;
+  qaRevealed = !qaRevealed;
+  const masterIdx = Number(qaCardWrap.dataset.masterIdx);
+  applyQaMaskVisibility(qaPractice.shots[masterIdx]);
+});
+document.getElementById('qaTextCard').addEventListener('click', ()=>{
   qaRevealed = !qaRevealed;
   const masterIdx = Number(qaCardWrap.dataset.masterIdx);
   applyQaMaskVisibility(qaPractice.shots[masterIdx]);
@@ -3328,14 +3424,22 @@ function renderQaList(filtered){
     // object-fit等で余白(レターボックス)を作るとマスクがずれてしまう。
     // そこで imgWrap 自体の横幅に、縦横比から逆算した上限を付けることで、
     // 画像は常に「幅いっぱい＝imgWrapの境界」のまま、高さだけを抑える
-    if(shot.width && shot.height){
+    const isTextCard = !!((shot.textEn || '').trim() || (shot.textJa || '').trim());
+    if(shot.width && shot.height && !isTextCard){
       const QA_LIST_MAX_H = 340; // px。1画面に2〜3枚ほど収まる高さが目安
       imgWrap.style.maxWidth = Math.round(QA_LIST_MAX_H * (shot.width / shot.height)) + 'px';
       imgWrap.style.margin = '0 auto';
     }
-    const img = document.createElement('img');
-    img.src = shot.dataUrl;
-    imgWrap.appendChild(img);
+    if(isTextCard){
+      const tx = document.createElement('div');
+      tx.className = 'qa-list-text';
+      tx.textContent = (shot.textEn || '').trim();
+      imgWrap.appendChild(tx);
+    }else{
+      const img = document.createElement('img');
+      img.src = shot.dataUrl;
+      imgWrap.appendChild(img);
+    }
 
     // 暗記度ラベルと番号は、画像に重ねず見出し行に置く
     const head = document.createElement('div');
@@ -3357,7 +3461,7 @@ function renderQaList(filtered){
       left:   { top:'0', bottom:'0', left:'0', width:m.left + '%' },
       right:  { top:'0', bottom:'0', right:'0', width:m.right + '%' }
     };
-    if(!shot.answerText) Object.keys(sideStyle).forEach(side=>{
+    if(!shot.answerText && !isTextCard) Object.keys(sideStyle).forEach(side=>{
       const maskEl = document.createElement('div');
       maskEl.className = 'qa-list-mask';
       Object.assign(maskEl.style, sideStyle[side]);
@@ -3383,9 +3487,10 @@ function renderQaList(filtered){
     hintBox.textContent = shot.hint ? ('ヒント：' + shot.hint) : '';
 
     // AIカードの答え(開いているときだけ、ヒントと並べて表示する)
+    const ansText = shot.answerText || (isTextCard ? (shot.textJa || '') : '');
     const ansBox = document.createElement('div');
-    ansBox.className = 'hint-box answer-box' + ((revealed && shot.answerText) ? ' show' : '');
-    ansBox.textContent = shot.answerText || '';
+    ansBox.className = 'hint-box answer-box' + ((revealed && ansText) ? ' show' : '');
+    ansBox.textContent = ansText;
 
     const actions = document.createElement('div');
     actions.className = 'qa-list-actions';
@@ -3882,6 +3987,13 @@ function renderThumbs(){
     });
     bar.appendChild(hintBtn);
 
+    if((shot.textEn || '').trim() || (shot.textJa || '').trim()){
+      const convMark = document.createElement('span');
+      convMark.className = 'hint-btn';
+      convMark.textContent = '文字✓';
+      bar.appendChild(convMark);
+    }
+
     box.addEventListener('click', ()=>{
       if(!selectMode) return;
       if(selectedShotIds.has(shot.id)) selectedShotIds.delete(shot.id);
@@ -4063,8 +4175,98 @@ function makePdfTextImage(shot){
 
 /* 撮影中の写真(shots)以外にも、保存済みセットの写真でもPDFを作れるように
    写真の配列を受け取る形にしたもの。中身のレイアウト処理は今まで通り */
-function buildAndDownloadPdfForShots(targetShots, filename){
-  if(!targetShots || targetShots.length === 0) return false;
+/* 文字カード(写真を読み取ってテキスト化したカード)をPDFに印刷するための行画像。
+   全部の行でキャンバスの大きさ・英語の開始位置・日本語の開始位置を固定するので、
+   印刷したあと紙のシートで隠して少しずつずらす勉強がしやすい。
+   jsPDFの標準フォントは日本語を出せないため、canvasに描いて画像にする */
+function makePdfWordRowImage(shot){
+  const pxW = 1400, pxH = 420, pad = 44;
+  const jaX = 800; // 日本語の列の開始位置(全行で固定)
+  const cv = document.createElement('canvas');
+  cv.width = pxW; cv.height = pxH;
+  const cx = cv.getContext('2d');
+  const ink = inkSaveOn ? '#595959' : '#26241f';
+  cx.fillStyle = inkSaveOn ? '#ffffff' : '#fffdf8';
+  cx.fillRect(0, 0, pxW, pxH);
+  cx.strokeStyle = inkSaveOn ? '#9a9a9a' : 'rgba(38,36,31,0.45)';
+  cx.lineWidth = 3;
+  cx.strokeRect(2, 2, pxW - 4, pxH - 4);
+
+  function wrapLines(text, maxW, font){
+    cx.font = font;
+    const lines = [];
+    String(text || '').split('\n').forEach(srcLine=>{
+      const tokens = srcLine.split(/(\s+)/).filter(t=>t.length);
+      let cur = '';
+      tokens.forEach(tok=>{
+        if(!/^\s+$/.test(tok) && cx.measureText(tok).width > maxW){
+          if(cur){ lines.push(cur.replace(/\s+$/, '')); cur = ''; }
+          let part = '';
+          for(const ch of tok){
+            if(part && cx.measureText(part + ch).width > maxW){ lines.push(part); part = ch; }
+            else part += ch;
+          }
+          cur = part;
+        }else if(cur && cx.measureText(cur + tok).width > maxW){
+          lines.push(cur.replace(/\s+$/, ''));
+          cur = /^\s+$/.test(tok) ? '' : tok;
+        }else{
+          cur += tok;
+        }
+      });
+      lines.push(cur.replace(/\s+$/, ''));
+    });
+    return lines;
+  }
+  function drawCol(text, x, maxW, font, lineH, maxLines){
+    let lines = wrapLines(text, maxW, font);
+    if(lines.length > maxLines) lines = lines.slice(0, maxLines);
+    cx.font = font;
+    cx.fillStyle = ink;
+    cx.textBaseline = 'top';
+    let y = (pxH - lines.length * lineH) / 2;
+    lines.forEach(l=>{ cx.fillText(l, x, y); y += lineH; });
+  }
+
+  // 英語と日本語の間の仕切り線(位置は全行で固定)
+  cx.beginPath();
+  cx.moveTo(jaX - 30, pad - 10);
+  cx.lineTo(jaX - 30, pxH - pad + 10);
+  cx.stroke();
+
+  drawCol(shot.textEn || '', pad, jaX - 30 - pad - 24, '700 72px sans-serif', 96, 3);
+  drawCol(shot.textJa || '', jaX, pxW - jaX - pad, '60px sans-serif', 84, 3);
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
+}
+
+/* 複数セットを1つのPDFにするときの、セットごとの見出し帯。
+   写真には重ねず、ページの上に独立した帯として置く */
+function makePdfSectionHeaderImage(title, subLabel){
+  const pxW = 1400, pxH = 96;
+  const cv = document.createElement('canvas');
+  cv.width = pxW; cv.height = pxH;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = inkSaveOn ? '#ffffff' : '#efe8d8';
+  cx.fillRect(0, 0, pxW, pxH);
+  cx.fillStyle = inkSaveOn ? '#9a9a9a' : '#d9481f';
+  cx.fillRect(0, 0, 20, pxH);
+  cx.font = '700 52px sans-serif';
+  cx.fillStyle = inkSaveOn ? '#595959' : '#26241f';
+  cx.textBaseline = 'top';
+  let text = title + (subLabel ? '　' + subLabel : '');
+  while(text.length > 1 && cx.measureText(text).width > pxW - 110) text = text.slice(0, -1);
+  cx.fillText(text, 52, (pxH - 68) / 2);
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
+}
+
+/* セクション(まとまり)ごとにPDFを作る共通処理。
+   section.title があるセクションは、新しいページから始めて見出し帯を付け、
+   ページをまたぐときも「(つづき)」の見出しを付けるので、
+   複数セットを混ぜても、どこからどこまでがどのセットか分かる。
+   title が無いセクションは今まで通りの並べ方になる */
+function buildPdfSections(sections, filename){
+  const total = sections.reduce((n, s)=> n + ((s.shots || []).length), 0);
+  if(total === 0) return false;
 
   if(!(window.jspdf && window.jspdf.jsPDF)){
     setStatus('PDF機能の読み込みに失敗しました。電波の良い場所でもう一度ボタンを押してみてください。', true);
@@ -4083,7 +4285,7 @@ function buildAndDownloadPdfForShots(targetShots, filename){
 
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 4;         // 外側の余白(mm)。より詰めて1枚に多く入るようにしている
+    const margin = 4;         // 外側の余白(mm)
     const gap = 1.5;          // 縦方向のカード同士の間隔(mm)
     const columnGap = 1.5;    // 列と列の間隔(mm)
     const columns = Math.max(1, Math.min(8, parseInt(layoutColsSel.value, 10) || 1));
@@ -4092,37 +4294,67 @@ function buildAndDownloadPdfForShots(targetShots, filename){
     const colW = (usableW - columnGap*(columns-1)) / columns;
 
     let cursorY = margin;
+    let pageHasContent = false;
 
-    // AIカードは写真の下に答え(意味)も印刷する
-    const textImgs = targetShots.map(s => s.answerText ? makePdfTextImage(s) : null);
+    function drawHeader(section, continuation){
+      const sub = continuation ? '（つづき）' : ('（全' + section.shots.length + '枚）');
+      const hImg = makePdfSectionHeaderImage(section.title, sub);
+      const hH = usableW * hImg.aspect;
+      doc.addImage(hImg.dataUrl, 'JPEG', margin, cursorY, usableW, hH);
+      cursorY += hH + 3; // 見出しとカードの間は必ず空ける(密着させない)
+    }
 
-    // 写真をcolumns個ずつの「行」に分けて、行ごとに高さをそろえて並べる
-    for(let i=0; i<targetShots.length; i += columns){
-      const rowItems = targetShots.slice(i, i + columns);
-      const rowHeights = rowItems.map((s, j)=>{
-        let h = colW * (s.height / s.width);
-        const t = textImgs[i + j];
-        if(t) h += colW * t.aspect;
-        return h;
-      });
-      const rowH = Math.max(...rowHeights);
-
-      // ページに入りきらなければ新しいページへ
-      if(cursorY + rowH > pageH - margin){
-        doc.addPage();
-        cursorY = margin;
+    sections.forEach(section=>{
+      if(!section.shots || section.shots.length === 0) return;
+      if(section.title){
+        if(pageHasContent){
+          doc.addPage();
+          cursorY = margin;
+        }
+        drawHeader(section, false);
       }
 
-      rowItems.forEach((shot, idx)=>{
-        const x = margin + idx * (colW + columnGap);
-        const h = colW * (shot.height / shot.width);
-        doc.addImage(inkUrl(shot), 'JPEG', x, cursorY, colW, h);
-        const t = textImgs[i + idx];
-        if(t) doc.addImage(t.dataUrl, 'JPEG', x, cursorY + h, colW, colW * t.aspect);
+      // 写真・AIカード・文字カードを、印刷用の項目に変換しておく
+      const items = section.shots.map(s=>{
+        if((s.textEn || '').trim() || (s.textJa || '').trim()){
+          return { kind:'text', img: makePdfWordRowImage(s) };
+        }
+        return { kind:'photo', shot:s, textImg: s.answerText ? makePdfTextImage(s) : null };
       });
 
-      cursorY += rowH + gap;
-    }
+      // columns個ずつの「行」に分けて、行ごとに高さをそろえて並べる
+      for(let i=0; i<items.length; i += columns){
+        const rowItems = items.slice(i, i + columns);
+        const rowHeights = rowItems.map(it=>{
+          if(it.kind === 'text') return colW * it.img.aspect;
+          let h = colW * (it.shot.height / it.shot.width);
+          if(it.textImg) h += colW * it.textImg.aspect;
+          return h;
+        });
+        const rowH = Math.max(...rowHeights);
+
+        // ページに入りきらなければ新しいページへ(見出し付きセクションは見出しも付け直す)
+        if(cursorY + rowH > pageH - margin){
+          doc.addPage();
+          cursorY = margin;
+          if(section.title) drawHeader(section, true);
+        }
+
+        rowItems.forEach((it, idx)=>{
+          const x = margin + idx * (colW + columnGap);
+          if(it.kind === 'text'){
+            doc.addImage(it.img.dataUrl, 'JPEG', x, cursorY, colW, colW * it.img.aspect);
+          }else{
+            const h = colW * (it.shot.height / it.shot.width);
+            doc.addImage(inkUrl(it.shot), 'JPEG', x, cursorY, colW, h);
+            if(it.textImg) doc.addImage(it.textImg.dataUrl, 'JPEG', x, cursorY + h, colW, colW * it.textImg.aspect);
+          }
+        });
+
+        cursorY += rowH + gap;
+        pageHasContent = true;
+      }
+    });
 
     doc.save(filename);
     return true;
@@ -4131,6 +4363,12 @@ function buildAndDownloadPdfForShots(targetShots, filename){
     setStatus('PDFの作成に失敗しました：' + err.message, true);
     return false;
   }
+}
+
+/* 撮影中の写真(shots)以外にも、保存済みセットの写真でもPDFを作れるように
+   写真の配列を受け取る形にしたもの(見出しなしの1セクションとして作る) */
+function buildAndDownloadPdfForShots(targetShots, filename){
+  return buildPdfSections([{ title: null, shots: targetShots }], filename);
 }
 
 /* 撮影タブから出力タブへ移動するだけのショートカット。
@@ -4645,13 +4883,18 @@ async function aiGeminiFetch(key, url, bodyObj){
 }
 
 async function aiCallApi(batch){
-  const key = aiGetKey();
   const parts = [];
   batch.forEach((w, i)=>{
     parts.push({ text: '画像' + (i + 1) });
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
   });
   parts.push({ text: AI_PROMPT });
+  return aiGeminiJson(parts);
+}
+
+/* GeminiへJSON応答を頼む共通処理(キーの取得・モデル候補を順に試す部分) */
+async function aiGeminiJson(parts){
+  const key = aiGetKey();
   const bodyObj = {
     contents: [{ parts: parts }],
     generationConfig: {
@@ -4805,6 +5048,166 @@ function aiRenderResults(){
   aiAddBtn.style.display = aiResults.length ? '' : 'none';
 }
 
+
+/* ================= 文字カード変換 =================
+   写真カード(英語と日本語が一緒に写っているもの)を Gemini に読み取らせて
+   textEn / textJa を付け、PDFでは写真の代わりに「全部同じ大きさ・
+   同じ位置の文字の行」として印刷できるようにする機能。
+   写真そのものは消さないので、いつでも写真に戻せる。
+   変換結果はその場で直せて、セットの場合は閉じるときに保存される */
+const CONV_PROMPT = [
+  'あなたは文字起こしの専門家です。添付した各画像は単語カードで、英語(単語や熟語)と、その日本語の意味が一緒に写っています。',
+  '画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
+  '[{"en":"英語の部分をそのまま書き写したもの","ja":"日本語の意味の部分をそのまま書き写したもの"}]',
+  'ルール:',
+  '・意味を考えて訳し直したりせず、写っている文字をそのまま書き写すこと。',
+  '・英語に発音記号や品詞の記号などが付いていたら、それも含めて書き写すこと。',
+  '・日本語が複数行に分かれていたら、読点やスペースでつないで1行にまとめること。',
+  '・読み取れない部分は空文字にすること。推測で作らないこと。'
+].join('\n');
+
+const convOverlayEl = document.getElementById('convOverlay');
+const convTitleEl   = document.getElementById('convTitle');
+const convStatusEl  = document.getElementById('convStatus');
+const convListEl    = document.getElementById('convList');
+const convRunBtn    = document.getElementById('convRunBtn');
+const convCloseBtn  = document.getElementById('convCloseBtn');
+let convTarget = null; // { title, shots, deckRecord }
+
+function convIsConverted(s){
+  return !!((s.textEn || '').trim() || (s.textJa || '').trim());
+}
+
+function openConvOverlay(title, targetShots, deckRecord){
+  convTarget = { title: title, shots: targetShots, deckRecord: deckRecord || null };
+  convTitleEl.textContent = '文字カードに変換：' + title;
+  convStatusEl.textContent = '';
+  convOverlayEl.classList.add('open');
+  convRenderList();
+  convUpdateRunBtn();
+}
+
+async function convSaveIfDeck(){
+  if(convTarget && convTarget.deckRecord){
+    try{
+      await saveDeckToStorage(convTarget.deckRecord);
+      await refreshBrowseView();
+    }catch(e){ console.error(e); }
+  }
+}
+
+function convUpdateRunBtn(){
+  if(!convTarget) return;
+  const rest = convTarget.shots.filter(s=>!convIsConverted(s)).length;
+  convRunBtn.textContent = rest
+    ? 'AIで読み取る（未変換 ' + rest + '枚）'
+    : 'AIで読み取る（全部変換済み）';
+}
+
+function convRenderList(){
+  convListEl.innerHTML = '';
+  if(!convTarget || convTarget.shots.length === 0){
+    const note = document.createElement('div');
+    note.className = 'sub';
+    note.textContent = 'カードがありません';
+    convListEl.appendChild(note);
+    return;
+  }
+  convTarget.shots.forEach((s, i)=>{
+    const box = document.createElement('div');
+    box.className = 'ai-result';
+    const head = document.createElement('div');
+    head.className = 'ai-result-head';
+    const im = document.createElement('img');
+    im.src = s.dataUrl;
+    head.appendChild(im);
+    const info = document.createElement('div');
+    info.style.flex = '1';
+    const title = document.createElement('div');
+    const badge = document.createElement('span');
+    badge.className = 'conv-badge' + (convIsConverted(s) ? '' : ' photo');
+    badge.textContent = convIsConverted(s) ? '文字カード' : '写真のまま';
+    title.appendChild(badge);
+    title.appendChild(document.createTextNode('　#' + (i + 1)));
+    info.appendChild(title);
+    if(convIsConverted(s)){
+      const rb = document.createElement('button');
+      rb.className = 'btn-danger';
+      rb.textContent = '写真に戻す';
+      rb.style.marginTop = '6px';
+      rb.addEventListener('click', ()=>{
+        s.textEn = '';
+        s.textJa = '';
+        convRenderList();
+        convUpdateRunBtn();
+      });
+      info.appendChild(rb);
+    }
+    head.appendChild(info);
+    box.appendChild(head);
+    box.appendChild(aiField('英語', 'text', s.textEn || '', v=>{ s.textEn = v; }));
+    box.appendChild(aiField('日本語の意味', 'textarea', s.textJa || '', v=>{ s.textJa = v; }));
+    convListEl.appendChild(box);
+  });
+}
+
+convRunBtn.addEventListener('click', async ()=>{
+  if(!convTarget) return;
+  const targets = convTarget.shots.filter(s=>!convIsConverted(s));
+  if(targets.length === 0){
+    convStatusEl.textContent = '未変換のカードはありません（全部変換済みです）。直したいカードは下の欄で直せます。';
+    return;
+  }
+  if(!aiGetKey()){
+    convStatusEl.textContent = '先にGemini APIキーを保存してください。この画面を閉じて、撮影タブの「AI単語カード」欄でキーを保存できます。';
+    showToast('先にAPIキーを保存してください', true);
+    return;
+  }
+  convRunBtn.disabled = true;
+  let done = 0;
+  try{
+    // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)
+    for(let i = 0; i < targets.length; i += 8){
+      const batch = targets.slice(i, i + 8);
+      convStatusEl.textContent = 'AIが読み取っています…（' + done + ' / ' + targets.length + '枚）';
+      const parts = [];
+      batch.forEach((w, j)=>{
+        parts.push({ text: '画像' + (j + 1) });
+        parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
+      });
+      parts.push({ text: CONV_PROMPT });
+      const arr = await aiGeminiJson(parts);
+      batch.forEach((w, j)=>{
+        const r = arr[j] || {};
+        w.textEn = (r.en || '').trim();
+        w.textJa = (r.ja || '').trim();
+      });
+      done += batch.length;
+      convRenderList();
+    }
+    convStatusEl.textContent = '読み取りが終わりました。まちがいがあれば直してください。閉じると保存されます。';
+    await convSaveIfDeck();
+    showToast('文字カードに変換しました');
+  }catch(e){
+    console.error(e);
+    convStatusEl.textContent = '読み取りに失敗しました：' + (e && e.message ? e.message : '不明なエラー');
+    showToast('読み取りに失敗しました', true);
+  }finally{
+    convRunBtn.disabled = false;
+    convUpdateRunBtn();
+  }
+});
+
+convCloseBtn.addEventListener('click', async ()=>{
+  await convSaveIfDeck();
+  convOverlayEl.classList.remove('open');
+  convTarget = null;
+  renderThumbs();
+});
+
+document.getElementById('convOpenBtn').addEventListener('click', ()=>{
+  openConvOverlay('今の写真', shots, null);
+});
 
 /* ---------- APIキーの接続テスト ---------- */
 document.getElementById('aiApiKeyTestBtn').addEventListener('click', async ()=>{
