@@ -578,6 +578,17 @@
     text-align:center;
   }
   #pdfProg.show{ display:block; }
+  /* ---- 文字版カードの確認・修正画面 ---- */
+  #txtEditOverlay{
+    display:none;
+    position:fixed; inset:0;
+    background:var(--bg);
+    z-index:60;
+    flex-direction:column;
+    overflow-y:auto;
+    padding:14px 14px 40px;
+  }
+  #txtEditOverlay.open{ display:flex; }
   .qa-list-text{
     background:var(--panel);
     padding:16px 14px;
@@ -1231,7 +1242,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-05 00:10（PDFは作るときに選ぶ方式に変更）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-05 00:35（文字版は自動作成＋練習で写真／文字版を選べる版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1462,6 +1473,16 @@
       <button id="qaCloseBtn" class="btn-danger" style="flex:1">閉じる</button>
     </div>
   </div>
+</div>
+
+<!-- ===== 文字版カードの確認・修正 ===== -->
+<div id="txtEditOverlay">
+  <div class="conv-head">
+    <button id="txtEditCloseBtn" class="btn-secondary" style="flex:0 0 auto;">閉じる</button>
+    <div id="txtEditTitle" class="conv-title">文字版カード</div>
+  </div>
+  <div id="txtEditStatus" class="sub" style="padding:0 2px;"></div>
+  <div id="txtEditList"></div>
 </div>
 
 <!-- ===== PDF作成中の進み具合表示 ===== -->
@@ -2639,7 +2660,7 @@ async function renderDeckList(){
         check.dispatchEvent(new Event('change'));
         return;
       }
-      openQaViewer(d.name, d.shots, d.mask, d);
+      startDeckPractice(d);
     });
     row.appendChild(main);
 
@@ -2652,12 +2673,13 @@ async function renderDeckList(){
       practiceBtn.textContent = '練習';
       practiceBtn.addEventListener('click', (e)=>{
         e.stopPropagation();
-        openQaViewer(d.name, d.shots, d.mask, d);
+        startDeckPractice(d);
       });
 
       /* よく使う「練習」「書き出す」だけをボタンとして残し、それ以外は
          「その他」メニューにまとめる(ボタンが増えてごちゃつくのを防ぐ) */
       const deckMoreActions = {
+        txtedit: ()=>{ openTxtEdit(d); },
         shuffle: async ()=>{
           if(d.shots.length < 2) return;
           if(!confirm('セット「' + d.name + '」のカードの順番をシャッフルします。シャッフルした順番で保存されます（PDFもその順番になります）。よろしいですか？')) return;
@@ -2756,6 +2778,7 @@ async function renderDeckList(){
       moreBtn.addEventListener('click', async (e)=>{
         e.stopPropagation();
         const act = await pickFromList('「' + d.name + '」の操作を選んでください', [
+          { label:'文字版を見る・直す', value:'txtedit' },
           { label:'シャッフル', value:'shuffle' },
           { label:'別フォルダへ移動', value:'move' },
           { label:'名前変更', value:'rename' },
@@ -2803,6 +2826,7 @@ saveDeckBtn.addEventListener('click', async ()=>{
     await saveDeckToStorage(newDeck);
     await refreshBrowseView();
     setStatus('セット「' + name + '」を保存しました（' + newDeck.shots.length + '枚）');
+    kickBgTextConvert(); // 保存したセットの文字版を裏で作る
   }catch(e){
     console.error(e);
     setStatus('保存に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
@@ -2888,6 +2912,7 @@ importDataInput.addEventListener('change', async ()=>{
     await refreshFolderSelect();
     await refreshBrowseView();
     setStatus('データを読み込みました（新規セット' + result.newDecks + '個・追加更新' + result.updatedDecks + '個・追加カード' + result.newCards + '枚）');
+    kickBgTextConvert();
   }catch(e){
     console.error(e);
     setStatus('読み込みに失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
@@ -2898,6 +2923,7 @@ importDataInput.addEventListener('change', async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
   await refreshFolderSelect();
   await renderFolderList();
+  kickBgTextConvert(); // 文字版の無いセットがあれば裏で作る
 })();
 
 /* ---------- 一問一答：練習画面(全画面) ----------
@@ -2905,7 +2931,23 @@ importDataInput.addEventListener('change', async ()=>{
    セットを指定した場合はそのセットの内容で練習する。
    deckRecordを渡しておくと、練習中にカードを編集(削除・並べ替え・
    暗記済み切り替え)するたびに、そのままIndexedDBへ上書き保存される。 */
-function openQaViewer(name, practiceShots, mask, deckRecord){
+/* セットの練習を始めるとき、文字版のあるセットなら
+   写真のままか文字版かを選べるようにする */
+async function startDeckPractice(d){
+  const hasText = (d.shots || []).some(s=> (s.textEn || '').trim() || (s.textJa || '').trim());
+  let textMode = false;
+  if(hasText){
+    const v = await pickFromList('練習のしかたを選んでください', [
+      { label:'写真のままで練習する', value:'photo' },
+      { label:'文字版で練習する', value:'text' }
+    ]);
+    if(v === null) return;
+    textMode = (v === 'text');
+  }
+  openQaViewer(d.name, d.shots, d.mask, d, textMode);
+}
+
+function openQaViewer(name, practiceShots, mask, deckRecord, textMode){
   const list = practiceShots || shots;
   if(list.length === 0) return;
 
@@ -2920,7 +2962,8 @@ function openQaViewer(name, practiceShots, mask, deckRecord){
     name: name || '',
     shots: list,
     mask: mask || { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight },
-    deckRecord: deckRecord || null
+    deckRecord: deckRecord || null,
+    textMode: !!textMode
   };
   qaDeckTitle.textContent = qaPractice.name ? ('一問一答：' + qaPractice.name) : '一問一答：今の写真';
   qaMode = 'one';
@@ -3045,7 +3088,7 @@ function renderQaCard(filtered){
   qaCardWrap.dataset.masterIdx = masterIdx;
   qaCardImg.src = shot.dataUrl;
   const qaTextCardEl = document.getElementById('qaTextCard');
-  const qaIsTextCard = !!((shot.textEn || '').trim() || (shot.textJa || '').trim());
+  const qaIsTextCard = !!(qaPractice.textMode && ((shot.textEn || '').trim() || (shot.textJa || '').trim()));
   if(qaIsTextCard){
     qaCardWrap.style.display = 'none';
     qaTextCardEl.style.display = 'block';
@@ -3089,7 +3132,7 @@ function applyQaMaskVisibility(shot){
   // 代わりに下の答え欄で意味の表示/非表示を切り替える
   const ansBox = document.getElementById('qaAnswerBox');
   const qaAnswerText = shot
-    ? (shot.answerText || (((shot.textEn || '').trim() || (shot.textJa || '').trim()) ? (shot.textJa || '') : ''))
+    ? (shot.answerText || ((qaPractice.textMode && ((shot.textEn || '').trim() || (shot.textJa || '').trim())) ? (shot.textJa || '') : ''))
     : '';
   if(shot && qaAnswerText){
     [qaMaskTop, qaMaskBottom, qaMaskLeft, qaMaskRight].forEach(el=>{ el.style.display = 'none'; });
@@ -3423,7 +3466,7 @@ function renderQaList(filtered){
     // object-fit等で余白(レターボックス)を作るとマスクがずれてしまう。
     // そこで imgWrap 自体の横幅に、縦横比から逆算した上限を付けることで、
     // 画像は常に「幅いっぱい＝imgWrapの境界」のまま、高さだけを抑える
-    const isTextCard = !!((shot.textEn || '').trim() || (shot.textJa || '').trim());
+    const isTextCard = !!(qaPractice.textMode && ((shot.textEn || '').trim() || (shot.textJa || '').trim()));
     if(shot.width && shot.height && !isTextCard){
       const QA_LIST_MAX_H = 340; // px。1画面に2〜3枚ほど収まる高さが目安
       imgWrap.style.maxWidth = Math.round(QA_LIST_MAX_H * (shot.width / shot.height)) + 'px';
@@ -4481,6 +4524,7 @@ document.getElementById('aiApiKeySaveBtn').addEventListener('click', ()=>{
   aiApiKeyInput.value = '';
   aiRenderKeyState();
   showToast('APIキーを保存しました');
+  kickBgTextConvert();
 });
 aiRenderKeyState();
 
@@ -5010,15 +5054,21 @@ function aiRenderResults(){
    保存済みセットのPDFは、作るときに「そのまま／白黒／文字化」を選ぶ。
    文字化は、この場でAIに写真の英語と日本語を読ませて文字の行にする
    (カード自体には保存しない)。白黒は、この場で印刷用画像を用意する */
-const PDF_TEXT_PROMPT = [
-  'あなたは文字起こしの専門家です。添付した各画像は単語カードで、英語(単語や熟語)と、その日本語の意味が一緒に写っています。',
-  '画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
-  '[{"en":"英語の部分をそのまま書き写したもの","ja":"日本語の意味の部分をそのまま書き写したもの"}]',
-  'ルール:',
-  '・意味を考えて訳し直したりせず、写っている文字をそのまま書き写すこと。',
-  '・英語に発音記号や品詞の記号などが付いていたら、それも含めて書き写すこと。',
-  '・日本語が複数行に分かれていたら、読点やスペースでつないで1行にまとめること。',
-  '・読み取れない部分は空文字にすること。推測で作らないこと。'
+const TEXT_READ_PROMPT = [
+  'あなたは単語帳の読み取りの専門家です。添付した各画像は単語カードで、単語帳の1項目(英語とその日本語の意味)が写っています。写真はきっちり切り取られていないことが多く、隣の項目の一部が見切れて入っていたり、品詞の印や記号が写っていたりします。',
+  '各画像について「主役の1項目だけ」を読み取り、画像の順番どおりに、次の形式のJSON配列だけを返してください。説明文やコードフェンスは付けないでください。',
+  '[{"en":"英語","ja":"日本語の意味"}]',
+  'en に入れるもの: 主項目の英語(単語・熟語)だけ。',
+  'ja に入れるもの: 主項目の日本語の意味だけ。意味が複数ある場合の「①」「②」の番号と区切りは、写っている通りに必ず残すこと。',
+  '除外するもの(en・ja のどちらにも入れない):',
+  '・品詞の印(名・動・形・副・代・前・接・間・助 など、単独の漢字1文字や略号で書かれた品詞表示)',
+  '・■ ◆ ● ▲ ★ などの記号そのもの',
+  '・隣の項目の見切れた断片(端に少しだけ写っている別の単語や意味)',
+  '・ページ番号や見出しなどの、項目の内容ではない印刷要素',
+  '・丸や線などの、手書きの印そのもの',
+  '手書きについて: 手書きの書き込みも読み取ること。意味の補足として書かれている手書きは、ja に含めること。',
+  '知識の使い方: 断片が主項目のものかどうか迷う場合は、その英語の実際の意味の知識と照らして判断すること。ただし、画像に写っていない意味を創作してはいけない。',
+  '意味の文言は、並び替えたり言い換えたりせず、写っている通りに書き写すこと。読み取れない場合は空文字にすること。'
 ].join('\n');
 
 const pdfProgEl = document.getElementById('pdfProg');
@@ -5078,8 +5128,13 @@ async function startPdfExport(sections, filename){
     return;
   }
   const targets = [];
-  sections.forEach(s=> (s.shots || []).forEach(sh=>{ if(!sh.answerText) targets.push(sh); }));
   const textMap = new Map();
+  sections.forEach(s=> (s.shots || []).forEach(sh=>{
+    if(sh.answerText) return; // AIカードは対象外
+    const en = (sh.textEn || '').trim(), ja = (sh.textJa || '').trim();
+    if(en || ja) textMap.set(sh, { en: en, ja: ja }); // 保存済みの文字版を使う
+    else targets.push(sh); // 無いものだけ、この場で読み取る
+  }));
   let done = 0, failed = 0;
   const pdfSleep = (ms)=> new Promise(r=> setTimeout(r, ms));
   showPdfProg('AIが写真の文字を読んでいます…（0 / ' + targets.length + '枚）');
@@ -5090,7 +5145,7 @@ async function startPdfExport(sections, filename){
       parts.push({ text: '画像' + (j + 1) });
       parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
     });
-    parts.push({ text: PDF_TEXT_PROMPT });
+    parts.push({ text: TEXT_READ_PROMPT });
     let arr = null, lastErr = null;
     for(let attempt = 0; attempt < 2 && !arr; attempt++){
       try{
@@ -5124,6 +5179,139 @@ async function startPdfExport(sections, filename){
       : '文字化したPDFを作成しました');
   }
 }
+
+
+/* ================= 文字版カードの自動作成(裏で) =================
+   セットを保存したとき・アプリを開いたときに、まだ文字版の無い
+   カードを裏で読み取って、セットに保存しておく。写真は消さない。
+   アプリを開いている間だけ動く(閉じている間は進まない)ので、
+   途中で閉じても、次に開いたときに残りから自動で続く */
+let bgConvRunning = false;
+async function kickBgTextConvert(){
+  if(bgConvRunning) return;
+  if(!aiGetKey()) return;
+  bgConvRunning = true;
+  try{
+    const decks = await loadDecks();
+    const jobs = [];
+    let total = 0;
+    decks.forEach(d=>{
+      const t = (d.shots || []).filter(s=> !s.answerText && !((s.textEn || '').trim() || (s.textJa || '').trim()));
+      if(t.length){ jobs.push({ deck: d, targets: t }); total += t.length; }
+    });
+    if(total === 0) return;
+    let done = 0, failed = 0;
+    showPdfProg('文字版カードを裏で作っています…（0 / ' + total + '枚）');
+    for(const job of jobs){
+      for(let i = 0; i < job.targets.length; i += 8){
+        const batch = job.targets.slice(i, i + 8);
+        const parts = [];
+        batch.forEach((w, j)=>{
+          parts.push({ text: '画像' + (j + 1) });
+          parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
+        });
+        parts.push({ text: TEXT_READ_PROMPT });
+        let arr = null, lastErr = null;
+        for(let attempt = 0; attempt < 2 && !arr; attempt++){
+          try{
+            arr = await aiGeminiJson(parts);
+          }catch(e){
+            lastErr = e;
+            if(attempt < 1) await new Promise(r=> setTimeout(r, 6000));
+          }
+        }
+        if(arr){
+          batch.forEach((w, j)=>{
+            const r = arr[j] || {};
+            const en = (r.en || '').trim(), ja = (r.ja || '').trim();
+            if(en || ja){ w.textEn = en; w.textJa = ja; done++; }
+            else failed++;
+          });
+        }else{
+          console.error(lastErr);
+          failed += batch.length;
+        }
+        await saveDeckToStorage(job.deck).catch(err=> console.error(err));
+        setPdfProg('文字版カードを裏で作っています…（' + (done + failed) + ' / ' + total + '枚）');
+        await new Promise(r=> setTimeout(r, 400));
+      }
+    }
+    hidePdfProg();
+    if(done > 0){
+      showToast('文字版カードを作りました（' + done + '枚）' + (failed > 0 ? '／' + failed + '枚は失敗' : ''));
+      refreshBrowseView();
+    }
+  }catch(e){
+    console.error(e);
+    hidePdfProg();
+  }finally{
+    bgConvRunning = false;
+  }
+}
+
+/* ================= 文字版カードの確認・修正 ================= */
+let txtEditDeck = null;
+function openTxtEdit(deck){
+  txtEditDeck = deck;
+  document.getElementById('txtEditTitle').textContent = '文字版カード：' + deck.name;
+  renderTxtEditList();
+  document.getElementById('txtEditOverlay').classList.add('open');
+}
+function renderTxtEditList(){
+  const list = document.getElementById('txtEditList');
+  const st = document.getElementById('txtEditStatus');
+  list.innerHTML = '';
+  if(!txtEditDeck) return;
+  const convCount = txtEditDeck.shots.filter(s=> (s.textEn || '').trim() || (s.textJa || '').trim()).length;
+  st.textContent = convCount === 0
+    ? 'まだ文字版がありません。アプリを開いている間に裏で自動で作られます（AIタブでGeminiキーの保存が必要です）。'
+    : '文字版のあるカード：' + convCount + ' / ' + txtEditDeck.shots.length + '枚。直したら「閉じる」で保存されます。';
+  txtEditDeck.shots.forEach((s)=>{
+    if(s.answerText) return; // AIカードは答えテキストが既にあるので対象外
+    const item = document.createElement('div');
+    item.className = 'conv-item';
+    const img = document.createElement('img');
+    img.src = s.dataUrl;
+    item.appendChild(img);
+    const fields = document.createElement('div');
+    fields.className = 'conv-fields';
+    const mk = (label, key)=>{
+      const wrap = document.createElement('div');
+      const lab = document.createElement('label');
+      lab.textContent = label;
+      wrap.appendChild(lab);
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = s[key] || '';
+      inp.placeholder = '（まだ作られていません）';
+      inp.addEventListener('input', ()=>{ s[key] = inp.value; });
+      wrap.appendChild(inp);
+      return wrap;
+    };
+    fields.appendChild(mk('英語', 'textEn'));
+    fields.appendChild(mk('日本語の意味', 'textJa'));
+    if((s.textEn || '').trim() || (s.textJa || '').trim()){
+      const rev = document.createElement('button');
+      rev.className = 'btn-secondary conv-revert';
+      rev.textContent = '文字版を消す';
+      rev.addEventListener('click', ()=>{ s.textEn = ''; s.textJa = ''; renderTxtEditList(); });
+      fields.appendChild(rev);
+    }
+    item.appendChild(fields);
+    list.appendChild(item);
+  });
+}
+document.getElementById('txtEditCloseBtn').addEventListener('click', async ()=>{
+  document.getElementById('txtEditOverlay').classList.remove('open');
+  if(txtEditDeck){
+    const d = txtEditDeck;
+    txtEditDeck = null;
+    try{
+      await saveDeckToStorage(d);
+      refreshBrowseView();
+    }catch(e){ console.error(e); }
+  }
+});
 
 /* ---------- APIキーの接続テスト ---------- */
 document.getElementById('aiApiKeyTestBtn').addEventListener('click', async ()=>{
