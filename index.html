@@ -1213,7 +1213,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-04 19:00（AIタブ新設＋保存済み変換の導線 追加版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-04 19:12（大量変換の途中失敗に強くした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -5065,12 +5065,27 @@ aiLookupBtn.addEventListener('click', async ()=>{
   aiResults = [];
   aiRenderResults();
   let done = 0;
-  try{
-    // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)
-    for(let i = 0; i < aiWords.length; i += 8){
-      const batch = aiWords.slice(i, i + 8);
-      aiStatusEl.textContent = 'AIが調べています…（' + done + ' / ' + aiWords.length + '語）';
-      const arr = await aiCallApi(batch);
+  let failed = 0;
+  const aiSleep2 = (ms)=> new Promise(r=> setTimeout(r, ms));
+  // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)。
+  // 文字カード変換と同じく、途中のグループが失敗しても全部は止めず、
+  // 待って1回やり直し、それでもダメなら飛ばして続ける
+  for(let i = 0; i < aiWords.length; i += 8){
+    const batch = aiWords.slice(i, i + 8);
+    aiStatusEl.textContent = 'AIが調べています…（' + (done + failed) + ' / ' + aiWords.length + '語）';
+    let arr = null, lastErr = null;
+    for(let attempt = 0; attempt < 2 && !arr; attempt++){
+      try{
+        arr = await aiCallApi(batch);
+      }catch(e){
+        lastErr = e;
+        if(attempt < 1){
+          aiStatusEl.textContent = 'AIが混み合っています。少し待ってやり直します…';
+          await aiSleep2(6000);
+        }
+      }
+    }
+    if(arr){
       batch.forEach((w, j)=>{
         const r = arr[j] || {};
         aiResults.push({
@@ -5083,16 +5098,22 @@ aiLookupBtn.addEventListener('click', async ()=>{
         });
       });
       done += batch.length;
-      aiRenderResults();
+    }else{
+      console.error(lastErr);
+      failed += batch.length;
     }
-    aiStatusEl.textContent = '調べ終わりました。まちがいがあれば直してから「カードに追加」を押してください';
-  }catch(e){
-    console.error(e);
-    aiStatusEl.textContent = 'AIで調べるのに失敗しました：' + (e && e.message ? e.message : '不明なエラー');
-    showToast('AIで調べるのに失敗しました', true);
-  }finally{
-    aiLookupBtn.disabled = aiWords.length === 0;
+    aiRenderResults();
   }
+  if(failed === 0){
+    aiStatusEl.textContent = '調べ終わりました。まちがいがあれば直してから「カードに追加」を押してください';
+  }else if(done > 0){
+    aiStatusEl.textContent = done + '語は調べられました。' + failed + '語はAIが混み合っていて失敗したので、追加したあと、失敗した語だけでもう一度「AIで意味を調べる」を押してください。';
+    showToast(failed + '語だけ失敗しました', true);
+  }else{
+    aiStatusEl.textContent = 'AIで調べるのに失敗しました。AIが混み合っている可能性があるので、1〜2分待ってからもう一度押してください。';
+    showToast('AIで調べるのに失敗しました', true);
+  }
+  aiLookupBtn.disabled = aiWords.length === 0;
 });
 
 /* ---------- 生成結果の確認・編集 ---------- */
@@ -5259,43 +5280,66 @@ convRunBtn.addEventListener('click', async ()=>{
     return;
   }
   if(!aiGetKey()){
-    convStatusEl.textContent = '先にGemini APIキーを保存してください。この画面を閉じて、撮影タブの「AI単語カード」欄でキーを保存できます。';
+    convStatusEl.textContent = '先にGemini APIキーを保存してください。この画面を閉じて、AIタブの「AI単語カード」欄でキーを保存できます。';
     showToast('先にAPIキーを保存してください', true);
     return;
   }
   convRunBtn.disabled = true;
-  let done = 0;
-  try{
-    // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)
-    for(let i = 0; i < targets.length; i += 8){
-      const batch = targets.slice(i, i + 8);
-      convStatusEl.textContent = 'AIが読み取っています…（' + done + ' / ' + targets.length + '枚）';
-      const parts = [];
-      batch.forEach((w, j)=>{
-        parts.push({ text: '画像' + (j + 1) });
-        parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
-      });
-      parts.push({ text: CONV_PROMPT });
-      const arr = await aiGeminiJson(parts);
+  let done = 0;   // 成功した枚数
+  let failed = 0; // 失敗して飛ばした枚数
+  const convSleep = (ms)=> new Promise(r=> setTimeout(r, ms));
+  // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)。
+  // 100枚のような大量変換でも、途中のグループが失敗したら少し待って
+  // 1回だけやり直し、それでもダメなら飛ばして続ける(全部は止めない)。
+  // 失敗分は未変換のまま残るので、もう一度押せば失敗分だけが対象になる
+  for(let i = 0; i < targets.length; i += 8){
+    const batch = targets.slice(i, i + 8);
+    convStatusEl.textContent = 'AIが読み取っています…（' + (done + failed) + ' / ' + targets.length + '枚）';
+    const parts = [];
+    batch.forEach((w, j)=>{
+      parts.push({ text: '画像' + (j + 1) });
+      parts.push({ inline_data: { mime_type: 'image/jpeg', data: w.dataUrl.split(',')[1] } });
+    });
+    parts.push({ text: CONV_PROMPT });
+    let arr = null, lastErr = null;
+    for(let attempt = 0; attempt < 2 && !arr; attempt++){
+      try{
+        arr = await aiGeminiJson(parts);
+      }catch(e){
+        lastErr = e;
+        if(attempt < 1){
+          convStatusEl.textContent = 'AIが混み合っています。少し待ってやり直します…';
+          await convSleep(6000);
+        }
+      }
+    }
+    if(arr){
       batch.forEach((w, j)=>{
         const r = arr[j] || {};
         w.textEn = (r.en || '').trim();
         w.textJa = (r.ja || '').trim();
       });
       done += batch.length;
-      convRenderList();
+    }else{
+      console.error(lastErr);
+      failed += batch.length;
     }
-    convStatusEl.textContent = '読み取りが終わりました。まちがいがあれば直してください。閉じると保存されます。';
-    await convSaveIfDeck();
-    showToast('文字カードに変換しました');
-  }catch(e){
-    console.error(e);
-    convStatusEl.textContent = '読み取りに失敗しました：' + (e && e.message ? e.message : '不明なエラー');
-    showToast('読み取りに失敗しました', true);
-  }finally{
-    convRunBtn.disabled = false;
-    convUpdateRunBtn();
+    convRenderList();
+    // 途中経過もときどき保存しておく(途中で閉じても成功分は残る)
+    if(((i / 8) % 3 === 2) || i + 8 >= targets.length) await convSaveIfDeck();
   }
+  if(failed === 0){
+    convStatusEl.textContent = '読み取りが終わりました（' + done + '枚）。まちがいがあれば直してください。閉じると保存されます。';
+    showToast('文字カードに変換しました');
+  }else if(done > 0){
+    convStatusEl.textContent = done + '枚は変換できました。' + failed + '枚はAIが混み合っていて失敗したので、少し待ってからもう一度「AIで読み取る」を押してください（失敗分だけが対象になります）。';
+    showToast(failed + '枚だけ失敗しました', true);
+  }else{
+    convStatusEl.textContent = '読み取りに失敗しました。AIが混み合っている可能性があるので、1〜2分待ってからもう一度押してください。';
+    showToast('読み取りに失敗しました', true);
+  }
+  convRunBtn.disabled = false;
+  convUpdateRunBtn();
 });
 
 document.getElementById('convShuffleBtn').addEventListener('click', async ()=>{
