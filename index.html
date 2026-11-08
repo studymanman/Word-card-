@@ -1250,7 +1250,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 14:35（蓄積ルーム追加：新しい分だけ印刷できる版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 14:50（見出しは列幅に＋手動両面の表裏2セット版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1338,6 +1338,14 @@
     <span class="custom-slider-label" style="width:auto; color:var(--text-dim);">列（多いほど1枚に詰まります）</span>
   </div>
   <div class="sub">白黒・文字化は、PDFを作るときに選べます。</div>
+  <div class="row" style="align-items:center;">
+    <span class="custom-slider-label" style="width:auto;">裏表印刷</span>
+    <select id="duplexSel">
+      <option value="single">通常（1つのPDF）</option>
+      <option value="manual">手動両面用（表・裏の2セット）</option>
+    </select>
+  </div>
+  <div class="sub">プリンタが自動で裏表できる場合は「通常」で大丈夫です。自分で紙を裏返す場合は「手動両面用」にすると、表用と裏用の2つのPDFをZIPで出します（表を全部印刷 → 紙を裏返して入れる → 裏を全部印刷）。</div>
 </div>
 
 <!-- ===== フォルダ／セットの一覧 =====
@@ -4358,27 +4366,45 @@ function makePdfWordRowImage(shot){
 /* 複数セットを1つのPDFにするときの、セットごとの見出し帯。
    写真には重ねず、ページの上に独立した帯として置く */
 function makePdfSectionHeaderImage(title, subLabel){
-  const pxW = 1400, pxH = 96;
+  // 見出し帯はページ幅いっぱいではなく、カードの列と同じ幅で使う前提の寸法
+  const pxW = 1400, pxH = 150;
   const cv = document.createElement('canvas');
   cv.width = pxW; cv.height = pxH;
   const cx = cv.getContext('2d');
   cx.fillStyle = pdfBwActive ? '#ffffff' : '#efe8d8';
   cx.fillRect(0, 0, pxW, pxH);
   cx.fillStyle = pdfBwActive ? '#9a9a9a' : '#d9481f';
-  cx.fillRect(0, 0, 20, pxH);
-  cx.font = '700 52px sans-serif';
+  cx.fillRect(0, 0, 28, pxH);
+  cx.font = '700 84px sans-serif';
   cx.fillStyle = pdfBwActive ? '#404040' : '#26241f';
   cx.textBaseline = 'top';
   let text = title + (subLabel ? '　' + subLabel : '');
-  while(text.length > 1 && cx.measureText(text).width > pxW - 110) text = text.slice(0, -1);
-  cx.fillText(text, 52, (pxH - 68) / 2);
+  while(text.length > 1 && cx.measureText(text).width > pxW - 130) text = text.slice(0, -1);
+  cx.fillText(text, 72, (pxH - 108) / 2);
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
 }
 
+/* 手動両面用：表用PDFと裏用PDFを1つのZIPにまとめて出す */
+async function saveDuplexZip(frontBlob, backBlob, base){
+  try{
+    const ok = await ensureJSZip();
+    if(!ok || !window.JSZip) throw new Error('ZIP機能の読み込みに失敗しました');
+    const zip = new JSZip();
+    zip.file(base + '（表）.pdf', frontBlob);
+    zip.file(base + '（裏）.pdf', backBlob);
+    const blob = await zip.generateAsync({ type:'blob' });
+    downloadBlob(blob, base + '（表裏2セット）.zip');
+    setStatus('表用と裏用の2セットをZIPで保存しました（表を印刷 → 紙を裏返して入れる → 裏を印刷）');
+  }catch(e){
+    console.error(e);
+    setStatus('表裏2セットの作成に失敗しました：' + (e && e.message ? e.message : '不明なエラー'), true);
+  }
+}
+
 /* セクション(まとまり)ごとにPDFを作る共通処理。
-   並べ方(2026-11-08変更)：行ごとに左→右ではなく、左の列を上から下まで
-   埋めてから次の列へ進む「列優先」。セットが変わっても改ページせず、
-   見出し帯をその位置に流し込んで詰めて並べるので、空白が残らない */
+   並べ方：左の列を上から下まで埋めてから次の列へ進む「列優先」。
+   見出し帯はカードと同じ列幅の1項目として流れに入るので、
+   セットが変わっても空白が残らない */
 function buildPdfSections(sections, filename, opts){
   const total = sections.reduce((n, s)=> n + ((s.shots || []).length), 0);
   if(total === 0) return false;
@@ -4419,28 +4445,37 @@ function buildPdfSections(sections, filename, opts){
     }
     resetColumns(margin);
 
-    function newPage(){
-      doc.addPage();
-      resetColumns(margin);
+    // 手動両面モードのときは、論理ページの奇数ページを表用、
+    // 偶数ページを裏用のドキュメントに振り分けて描く
+    const duplexSelEl2 = document.getElementById('duplexSel');
+    const duplexManual = !!(duplexSelEl2 && duplexSelEl2.value === 'manual');
+    let backDoc = null;
+    let curDoc = doc;
+    let logicalPage = 1;
+    if(duplexManual){
+      backDoc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: size });
     }
 
-    // 見出し帯は幅いっぱいの塊として、一番進んでいる列の下に流し込む。
-    // 入りきらなければ次のページの先頭へ(セットごとの改ページはしない)
-    function drawHeaderFlow(section){
-      const hImg = makePdfSectionHeaderImage(section.title, '（全' + section.shots.length + '枚）');
-      const hH = usableW * hImg.aspect;
-      let y = Math.max(...colYs);
-      if(y + hH > bottomLimit){ newPage(); y = margin; }
-      doc.addImage(hImg.dataUrl, 'JPEG', margin, y, usableW, hH);
-      resetColumns(y + hH + 3); // 見出しの下は必ず空ける(密着させない)
+    function newPage(){
+      logicalPage++;
+      if(!duplexManual){
+        doc.addPage();
+      }else{
+        const target = (logicalPage % 2 === 1) ? doc : backDoc;
+        if(target === doc && logicalPage > 1) doc.addPage();
+        if(target === backDoc && logicalPage > 2) backDoc.addPage();
+        curDoc = target;
+      }
+      resetColumns(margin);
     }
 
     sections.forEach(section=>{
       if(!section.shots || section.shots.length === 0) return;
-      if(section.title) drawHeaderFlow(section);
 
-      // 写真・AIカード・文字カードを、印刷用の項目に変換しておく
-      const items = section.shots.map(s=>{
+      // 写真・AIカード・文字カードを、印刷用の項目に変換しておく。
+      // 見出し帯は、カードと同じ列幅の「1項目」として先頭に入れる
+      // (幅いっぱいにすると隣の列が空いて無駄になるため)
+      const cardItems = section.shots.map(s=>{
         // 「新しい分だけ」印刷のとき、印刷済みカードは場所だけ確保して空白にする
         if(opts && opts.skipPrinted && s.printed){
           let aspect;
@@ -4458,9 +4493,12 @@ function buildPdfSections(sections, filename, opts){
         }
         return { kind:'photo', shot:s, textImg: s.answerText ? makePdfTextImage(s) : null };
       });
+      const items = section.title
+        ? [{ kind:'header', img: makePdfSectionHeaderImage(section.title, '（全' + section.shots.length + '枚）') }].concat(cardItems)
+        : cardItems;
 
       items.forEach(it=>{
-        const h = it.kind === 'text'
+        const h = (it.kind === 'text' || it.kind === 'header')
           ? colW * it.img.aspect
           : it.kind === 'blank'
             ? colW * it.aspect
@@ -4475,19 +4513,25 @@ function buildPdfSections(sections, filename, opts){
         const y = colYs[curCol];
         if(it.kind === 'blank'){
           // 場所だけ確保して何も描かない(同じ紙に続きを印刷するため)
-        }else if(it.kind === 'text'){
-          doc.addImage(it.img.dataUrl, 'JPEG', x, y, colW, colW * it.img.aspect);
+        }else if(it.kind === 'text' || it.kind === 'header'){
+          curDoc.addImage(it.img.dataUrl, 'JPEG', x, y, colW, colW * it.img.aspect);
         }else{
           const ph = colW * (it.shot.height / it.shot.width);
           const photoData = (opts && opts.mode === 'bw' && inkCache.has(it.shot.dataUrl)) ? inkCache.get(it.shot.dataUrl) : it.shot.dataUrl;
-          doc.addImage(photoData, 'JPEG', x, y, colW, ph);
-          if(it.textImg) doc.addImage(it.textImg.dataUrl, 'JPEG', x, y + ph, colW, colW * it.textImg.aspect);
+          curDoc.addImage(photoData, 'JPEG', x, y, colW, ph);
+          if(it.textImg) curDoc.addImage(it.textImg.dataUrl, 'JPEG', x, y + ph, colW, colW * it.textImg.aspect);
         }
-        colYs[curCol] += h + gap;
+        colYs[curCol] += h + gap + (it.kind === 'header' ? 1.5 : 0);
       });
     });
 
-    doc.save(filename);
+    if(duplexManual && logicalPage >= 2){
+      // 手動両面用：表用と裏用を1つのZIPにまとめて出す(ダウンロードは1回で済む)
+      const base = filename.replace(/\.pdf$/i, '');
+      saveDuplexZip(doc.output('blob'), backDoc.output('blob'), base);
+    }else{
+      doc.save(filename);
+    }
     return true;
   }catch(err){
     console.error(err);
@@ -4544,6 +4588,8 @@ function saveAppSetting(key, value){
 function restoreAppSettings(){
   const s = loadAppSettings();
   if(s.pageSize) pageSizeSel.value = s.pageSize;
+  const dsel = document.getElementById('duplexSel');
+  if(dsel && s.duplex) dsel.value = s.duplex;
   if(s.cols) layoutColsSel.value = Math.max(1, Math.min(8, parseInt(s.cols, 10) || 2));
   const mirSize = document.getElementById('pageSizeSaved');
   if(mirSize) mirSize.value = pageSizeSel.value;
@@ -5459,6 +5505,10 @@ document.getElementById('txtEditCloseBtn').addEventListener('click', async ()=>{
     }catch(e){ console.error(e); }
   }
 });
+
+/* 裏表の出し方の設定を保存する */
+const duplexSelEl = document.getElementById('duplexSel');
+if(duplexSelEl) duplexSelEl.addEventListener('change', ()=> saveAppSetting('duplex', duplexSelEl.value));
 
 /* ---------- APIキーの接続テスト ---------- */
 document.getElementById('aiApiKeyTestBtn').addEventListener('click', async ()=>{
