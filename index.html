@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 19:30（文字版の自動作成はWi-Fi時のみ・進捗表示は保存パネル内へ・暗記タブのモードボタン撤去・AIカードの表は原型の文字カードにした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 20:45（AIの失敗理由を正しく表示・回数制限では次のモデルを試す・モデル順を空きやすい順に変えた版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -5321,13 +5321,18 @@ async function aiGeminiJson(parts){
       maxOutputTokens: 8192
     }
   };
-  // 試す順番は「無料枠で空いているモデル」から。最新モデル(3.8)は
-  // 無料枠だと混雑(503)が頻発してほぼ当たらないため後ろに置き、
-  // 使えないモデル(新規キーでは2.x系が404)だったら次の候補へ進む。
+  // 試す順番は「無料枠で空いているモデル」から。無料枠の実測
+  // (2026-09〜11、infraone集計)では成功数が多い順に
+  // 3.5-flash-lite > 3.1-flash-lite > 3.6-flash > 3.8-flash で、
+  // 最新モデルほど混雑(503)が多かったため、軽量モデルを先に置く。
+  // 無料枠の回数制限は「モデルごとに1日20回まで」で、枠はモデルごとに
+  // 別々に数えられる。だから回数制限(429)で止まったら、その場で
+  // 終わらせず次のモデルを試す(以前はここで即終了していたため、
+  // 最初のモデルの枠が切れた日は全部失敗になっていた)。
   // 混雑(503)のときは1回だけ待って再試行し、ダメなら次のモデルへ
-  const AI_MODELS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+  const AI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'];
   const aiSleep = (ms)=> new Promise(r=> setTimeout(r, ms));
-  let data = null, lastErr = null;
+  let data = null, lastErr = null, sawQuota = false, sawCongestion = false;
   for(const mdl of AI_MODELS){
     for(let attempt = 0; attempt < 2 && !data; attempt++){
       try{
@@ -5343,12 +5348,14 @@ async function aiGeminiJson(parts){
         lastErr = e;
         const msg = (e && e.message) || '';
         if(/high demand|overloaded|try again later|UNAVAILABLE|\b503\b/i.test(msg)){
+          sawCongestion = true;
           if(attempt < 1){
             aiSetStatus('AIが混み合っています。少し待って再試行中…', false);
             await aiSleep(2500);
           }
           continue;
         }
+        if(/quota|RESOURCE_EXHAUSTED|rate limit|\b429\b/i.test(msg)){ sawQuota = true; break; }
         if(/no longer available|not found|not supported|is not available/i.test(msg)) break;
         throw e;
       }
@@ -5356,9 +5363,12 @@ async function aiGeminiJson(parts){
     if(data) break;
   }
   if(!data){
-    const m = (lastErr && lastErr.message) || '';
-    if(/high demand|overloaded|try again later|UNAVAILABLE/i.test(m)){
-      throw new Error('いまAIが混み合っています。1〜2分待ってから、もう一度「AIで意味を調べる」を押してください。');
+    // 失敗の理由を決め打ちで「混雑」にせず、実際に起きた方を伝える
+    if(sawQuota && !sawCongestion){
+      throw new Error('今日の無料枠を使い切ったようです（無料枠はモデルごとに1日20回まで）。枠は日本時間の17時ごろに元に戻ります。それまではAIで調べられません。');
+    }
+    if(sawCongestion){
+      throw new Error('いまAIが混み合っています。1〜2分待ってから、もう一度「AIで意味を調べる」を押してください。' + (sawQuota ? '（一部のモデルは今日の無料枠が終わっていました）' : ''));
     }
     throw lastErr || new Error('使えるモデルがありませんでした');
   }
@@ -5384,6 +5394,7 @@ aiLookupBtn.addEventListener('click', async ()=>{
   aiRenderResults();
   let done = 0;
   let failed = 0;
+  let lastFailErr = null;
   const aiSleep2 = (ms)=> new Promise(r=> setTimeout(r, ms));
   // 一度に送る画像は8枚までに区切る(大きすぎるリクエストを避ける)。
   // 文字カード変換と同じく、途中のグループが失敗しても全部は止めず、
@@ -5398,7 +5409,7 @@ aiLookupBtn.addEventListener('click', async ()=>{
       }catch(e){
         lastErr = e;
         if(attempt < 1){
-          aiStatusEl.textContent = 'AIが混み合っています。少し待ってやり直します…';
+          aiStatusEl.textContent = 'うまくいかなかったので、少し待ってやり直します…';
           await aiSleep2(6000);
         }
       }
@@ -5418,6 +5429,7 @@ aiLookupBtn.addEventListener('click', async ()=>{
       done += batch.length;
     }else{
       console.error(lastErr);
+      lastFailErr = lastErr;
       failed += batch.length;
     }
     aiRenderResults();
@@ -5425,10 +5437,10 @@ aiLookupBtn.addEventListener('click', async ()=>{
   if(failed === 0){
     aiStatusEl.textContent = '調べ終わりました。まちがいがあれば直してから「カードに追加」を押してください';
   }else if(done > 0){
-    aiStatusEl.textContent = done + '語は調べられました。' + failed + '語はAIが混み合っていて失敗したので、追加したあと、失敗した語だけでもう一度「AIで意味を調べる」を押してください。';
+    aiStatusEl.textContent = done + '語は調べられました。' + failed + '語は失敗したので、追加したあと、失敗した語だけでもう一度「AIで意味を調べる」を押してください。' + (lastFailErr ? '理由：' + lastFailErr.message : '');
     showToast(failed + '語だけ失敗しました', true);
   }else{
-    aiStatusEl.textContent = 'AIで調べるのに失敗しました。AIが混み合っている可能性があるので、1〜2分待ってからもう一度押してください。';
+    aiStatusEl.textContent = 'AIで調べるのに失敗しました。' + (lastFailErr ? '理由：' + lastFailErr.message : '1〜2分待ってからもう一度押してください。');
     showToast('AIで調べるのに失敗しました', true);
   }
   aiLookupBtn.disabled = aiWords.length === 0;
@@ -5623,7 +5635,7 @@ async function startPdfExport(sections, filename, accumDeck){
       }catch(e){
         lastErr = e;
         if(attempt < 1){
-          setPdfProg('AIが混み合っています。少し待ってやり直します…');
+          setPdfProg('うまくいかなかったので、少し待ってやり直します…');
           await pdfSleep(6000);
         }
       }
@@ -5774,7 +5786,7 @@ async function kickBgTextConvert(manual){
         }
         await saveDeckToStorage(job.deck).catch(err=> console.error(err));
         if(bgConvText) bgConvText.textContent = '文字版カードを裏で作っています…（' + (done + failed) + ' / ' + total + '枚）';
-        await new Promise(r=> setTimeout(r, 400));
+        await new Promise(r=> setTimeout(r, 1000)); // 無料枠の1分あたり制限に当たりにくくする
       }
     }
     if(bgConvStop){
