@@ -199,6 +199,7 @@
     box-shadow:0 3px 10px rgba(0,0,0,0.5);
     padding:0;
     transition: transform .1s ease;
+    touch-action:none; /* 長押しドラッグで膜・枠を調整するため、スクロールに取られないように */
   }
   .cam-shutter:active{ transform:scale(0.92); }
   .cam-shutter:disabled{
@@ -1234,6 +1235,7 @@
   <div id="maskHintCap" class="sub" style="display:none; margin:6px 0 0;">
     カメラ枠のふちに出た白いつまみを指でつかんでドラッグすると、隠す範囲(グレーの膜)を伸び縮みできます。
   </div>
+  <div class="sub">シャッターを押したまま左右に動かすと隠す膜の範囲、上下に動かすと枠の縦幅が変わります。指を離すと撮影します（膜は横向きの枠では右から、縦向きの枠では左からだけ出ます）。</div>
   <div class="row">
     <button id="shuffleBtn" class="btn-secondary" style="flex:1">並び順をランダムにする</button>
     <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
@@ -1259,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 15:45（撮影タブに一問一答ボタン・蓄積への移動/複製・白黒で青系を白っぽく・複数PDFのシャッフル選択を追加した版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 16:10（AIカードPDFを左=英語・右=訳の小さい文字に・シャッター長押しドラッグで膜と枠の調整・膜は横=右のみ縦=左のみにした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -2193,17 +2195,50 @@ makeMaskHandleDraggable(maskHandleBottom, 'y', true,  ()=>maskBottom, v=>maskBot
 makeMaskHandleDraggable(maskHandleLeft,   'x', false, ()=>maskLeft,   v=>maskLeft=v);
 makeMaskHandleDraggable(maskHandleRight,  'x', true,  ()=>maskRight,  v=>maskRight=v);
 
+/* 膜を出す側は枠の向きで決まる：横向きの枠=右からのみ、縦向きの枠=左からのみ。
+   上下からは出さない */
+function activeMaskSide(){
+  return frameEl.classList.contains('vertical') ? 'left' : 'right';
+}
+/* 向きに合わせて、有効な側だけに膜を寄せる。反対側で使っていた割合は
+   そのまま引き継ぐ(例：右50%で縦向きにしたら左50%になる) */
+function enforceMaskSide(){
+  maskTop = 0;
+  maskBottom = 0;
+  if(activeMaskSide() === 'left'){
+    if(maskLeft === 0 && maskRight > 0) maskLeft = maskRight;
+    if(maskLeft === 0) maskLeft = 50;
+    maskRight = 0;
+  }else{
+    if(maskRight === 0 && maskLeft > 0) maskRight = maskLeft;
+    if(maskRight === 0) maskRight = 50;
+    maskLeft = 0;
+  }
+  updateMaskDisplays();
+  refreshQaChrome();
+  saveQaSettings();
+}
+/* 膜プレビューとつまみの表示：編集モードONのとき、有効な側だけ出す */
+function refreshQaChrome(){
+  const side = activeMaskSide();
+  const show = (el, on)=>{ el.style.display = on ? 'block' : 'none'; };
+  show(previewMaskTop, false);
+  show(previewMaskBottom, false);
+  show(maskHandleTop, false);
+  show(maskHandleBottom, false);
+  show(previewMaskLeft, qaEnabled && side === 'left');
+  show(maskHandleLeft, qaEnabled && side === 'left');
+  show(previewMaskRight, qaEnabled && side === 'right');
+  show(maskHandleRight, qaEnabled && side === 'right');
+}
+
 /* 一問一答モードのON/OFFは、暗記タブと撮影タブの両方のボタンから
    切り替えられる(ボタンとヒントの表示は常に同期させる) */
 function setQaEnabled(on){
   qaEnabled = on;
   [qaToggleBtn, qaToggleBtnCap].forEach(b=>{ if(b) b.classList.toggle('active', qaEnabled); });
   [maskHint, maskHintCap].forEach(h=>{ if(h) h.style.display = qaEnabled ? 'block' : 'none'; });
-  // カメラ枠の上の膜プレビュー＆つまみも、ON/OFFに合わせて表示/非表示
-  [previewMaskTop, previewMaskBottom, previewMaskLeft, previewMaskRight,
-   maskHandleTop, maskHandleBottom, maskHandleLeft, maskHandleRight].forEach(el=>{
-    el.style.display = qaEnabled ? 'block' : 'none';
-  });
+  refreshQaChrome();
 }
 qaToggleBtn.addEventListener('click', ()=> setQaEnabled(!qaEnabled));
 if(qaToggleBtnCap) qaToggleBtnCap.addEventListener('click', ()=> setQaEnabled(!qaEnabled));
@@ -3847,6 +3882,7 @@ document.querySelectorAll('.btn-toggle[data-orient]').forEach(btn=>{
     btn.classList.add('active');
     frameEl.classList.toggle('vertical', btn.dataset.orient === 'vertical');
     saveAppSetting('orient', btn.dataset.orient);
+    enforceMaskSide(); // 膜の出る側を向きに合わせる(横=右のみ、縦=左のみ)
   });
 });
 
@@ -3933,7 +3969,7 @@ flipBtn.addEventListener('click', ()=>{
    映像(video)から直接canvasに描き写しているだけなので
    シャッター音は鳴りません。
 */
-shootBtn.addEventListener('click', ()=>{
+function captureShot(){
   if(!video.videoWidth){
     setStatus('カメラの準備がまだできていません。少し待ってから押してください。', true);
     return;
@@ -3987,6 +4023,75 @@ shootBtn.addEventListener('click', ()=>{
   renderThumbs();
   showCaptureSignal();
   setStatus('撮影しました（合計' + shots.length + '枚）');
+}
+
+/* ---------- シャッターのホールド＆ドラッグ ----------
+   シャッターボタンを押したまま指を動かすと、
+   ・左右：隠す膜の端が指について動き、膜の範囲が変わる
+     (横向きの枠は右からの膜、縦向きの枠は左からの膜だけが動く)
+   ・上下：枠の縦幅が変わる(上へ動かすほど長く、下へ動かすほど短く)
+   指を離すと、その状態で撮影する。普通にタップしたときも離した瞬間に撮れる */
+let shutterDrag = null;
+let shutterClickSwallow = false;
+shootBtn.addEventListener('pointerdown', (e)=>{
+  if(shootBtn.disabled) return;
+  // 指がボタンの外に出ても動きを追えるよう、ポインターをボタンに固定する
+  try{ shootBtn.setPointerCapture(e.pointerId); }catch(err){}
+  const frameRect = frameEl.getBoundingClientRect();
+  const videoRect = video.getBoundingClientRect();
+  shutterDrag = {
+    startX: e.clientX, startY: e.clientY,
+    frameW: Math.max(1, frameRect.width),
+    wrapW: Math.max(1, videoRect.width),
+    wrapH: Math.max(1, videoRect.height),
+    baseMask: activeMaskSide() === 'left' ? maskLeft : maskRight,
+    baseH: (frameRect.height / Math.max(1, videoRect.height)) * 100
+  };
+  // カスタム枠に切り替えたときに幅が飛ばないよう、今の幅もスライダーへ寄せておく
+  const wPct = Math.max(5, Math.min(100, Math.round((frameRect.width / Math.max(1, videoRect.width)) * 100)));
+  if(String(wPct) !== customWidthSlider.value){
+    customWidthSlider.value = wPct;
+    customWidthVal.textContent = wPct + '%';
+  }
+});
+shootBtn.addEventListener('pointermove', (e)=>{
+  if(!shutterDrag) return;
+  const dx = e.clientX - shutterDrag.startX;
+  const dy = e.clientY - shutterDrag.startY;
+  // 左右：膜の端を指の動きに追従させる
+  const dPct = (dx / shutterDrag.frameW) * 100;
+  maskTop = 0; maskBottom = 0;
+  if(activeMaskSide() === 'left'){
+    maskLeft = Math.round(Math.max(0, Math.min(100, shutterDrag.baseMask + dPct)));
+    maskRight = 0;
+  }else{
+    maskRight = Math.round(Math.max(0, Math.min(100, shutterDrag.baseMask - dPct)));
+    maskLeft = 0;
+  }
+  // 上下：枠の縦幅を変える(上に動かすほど長く)
+  const newH = Math.max(5, Math.min(98, shutterDrag.baseH - (dy / shutterDrag.wrapH) * 100));
+  frameEl.style.height = newH + '%';
+  const newHR = Math.round(newH);
+  if(String(newHR) !== customHeightSlider.value){
+    customHeightSlider.value = newHR;
+    customHeightVal.textContent = newHR + '%';
+  }
+  updateMaskDisplays();
+});
+function endShutterDrag(shoot){
+  if(!shutterDrag) return;
+  shutterDrag = null;
+  saveQaSettings();
+  if(shoot){
+    shutterClickSwallow = true; // 直後に来る click では二重に撮らない
+    captureShot();
+  }
+}
+shootBtn.addEventListener('pointerup', ()=> endShutterDrag(true));
+shootBtn.addEventListener('pointercancel', ()=> endShutterDrag(false));
+shootBtn.addEventListener('click', ()=>{
+  if(shutterClickSwallow){ shutterClickSwallow = false; return; }
+  captureShot();
 });
 
 /* ---------- 撮れたことを知らせる合図 ----------
@@ -4364,35 +4469,76 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
 */
 /* AIカードの答え(日本語の意味)をPDFに印刷するためのテキスト画像化。
    jsPDFの標準フォントは日本語を出せないため、canvasに描いて画像にする */
+/* AIカードの文字部分をPDFに印刷するための画像。
+   以前は訳だけを大きな文字で写真の下に置いていたが、「文字が大きい」
+   「左に英語・右に訳で並べたい」という要望で、2段組みに変更した。
+   左=英語(見たままの形 surface、無ければ原型 word)、右=訳＋ヒント */
 function makePdfTextImage(shot){
-  const pxW = 1000;
-  const fs = 52;
-  const lh = Math.round(fs * 1.5);
-  const pad = 30;
-  const lines = (shot.answerText || '').split('\n');
-  if(shot.hint) lines.push('ヒント：' + shot.hint);
+  const pxW = 1400;
+  const pad = 36;
+  const divX = 540; // 仕切り線の位置(左=英語、右=訳)
+  const enFont = '700 62px sans-serif';
+  const jaFont = '52px sans-serif';
+  const hintFont = '40px sans-serif';
+  const enLH = 80, jaLH = 72, hintLH = 54;
   const meas = document.createElement('canvas').getContext('2d');
-  meas.font = fs + 'px sans-serif';
-  const wrapped = [];
-  lines.forEach(line=>{
-    let cur = '';
-    for(const ch of line){
-      if(cur && meas.measureText(cur + ch).width > pxW - pad * 2){ wrapped.push(cur); cur = ch; }
-      else cur += ch;
-    }
-    wrapped.push(cur);
-  });
+  function wrap(text, maxW, font){
+    meas.font = font;
+    const lines = [];
+    String(text || '').split('\n').forEach(src=>{
+      const tokens = src.split(/(\s+)/).filter(t=>t.length);
+      let cur = '';
+      tokens.forEach(tok=>{
+        if(!/^\s+$/.test(tok) && meas.measureText(tok).width > maxW){
+          if(cur){ lines.push(cur.replace(/\s+$/, '')); cur = ''; }
+          let part = '';
+          for(const ch of tok){
+            if(part && meas.measureText(part + ch).width > maxW){ lines.push(part); part = ch; }
+            else part += ch;
+          }
+          cur = part;
+        }else if(cur && meas.measureText(cur + tok).width > maxW){
+          lines.push(cur.replace(/\s+$/, ''));
+          cur = /^\s+$/.test(tok) ? '' : tok;
+        }else{
+          cur += tok;
+        }
+      });
+      lines.push(cur.replace(/\s+$/, ''));
+    });
+    return lines;
+  }
+  const enLines = wrap((shot.surface || shot.word || '').trim(), divX - pad - 24, enFont).slice(0, 3);
+  const jaLines = wrap(shot.answerText || '', pxW - divX - 24 - pad, jaFont).slice(0, 3);
+  const hintLines = shot.hint ? wrap('ヒント：' + shot.hint, pxW - divX - 24 - pad, hintFont).slice(0, 2) : [];
+  const rightH = jaLines.length * jaLH + (hintLines.length ? 10 + hintLines.length * hintLH : 0);
+  const pxH = pad * 2 + Math.max(enLines.length * enLH, rightH, jaLH);
   const cv = document.createElement('canvas');
   cv.width = pxW;
-  cv.height = pad * 2 + wrapped.length * lh;
+  cv.height = pxH;
   const cx = cv.getContext('2d');
   cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
-  cx.fillRect(0, 0, cv.width, cv.height);
-  cx.font = fs + 'px sans-serif';
-  cx.fillStyle = pdfBwActive ? '#2e2e2e' : '#26241f';
+  cx.fillRect(0, 0, pxW, pxH);
+  const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
+  // 英語と訳の間の仕切り線
+  cx.strokeStyle = pdfBwActive ? '#9a9a9a' : 'rgba(38,36,31,0.35)';
+  cx.lineWidth = 3;
+  cx.beginPath();
+  cx.moveTo(divX, pad - 8);
+  cx.lineTo(divX, pxH - pad + 8);
+  cx.stroke();
+  cx.fillStyle = ink;
   cx.textBaseline = 'top';
-  wrapped.forEach((l, i)=> cx.fillText(l, pad, pad + i * lh));
-  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: cv.height / cv.width };
+  cx.font = enFont;
+  enLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * enLH));
+  cx.font = jaFont;
+  jaLines.forEach((l, i)=> cx.fillText(l, divX + 24, pad + i * jaLH));
+  if(hintLines.length){
+    cx.font = hintFont;
+    cx.fillStyle = pdfBwActive ? '#4a4a4a' : 'rgba(38,36,31,0.75)';
+    hintLines.forEach((l, i)=> cx.fillText(l, divX + 24, pad + jaLines.length * jaLH + 10 + i * hintLH));
+  }
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
 }
 
 /* 撮影中の写真(shots)以外にも、保存済みセットの写真でもPDFを作れるように
@@ -4705,6 +4851,7 @@ function restoreAppSettings(){
   }
 }
 restoreAppSettings();
+enforceMaskSide(); // 起動時も膜の側を枠の向きに合わせておく
 
 /* 初期状態の見た目を整える */
 renderThumbs();
