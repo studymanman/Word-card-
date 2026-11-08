@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 16:35（縦向きは高さ62%固定で幅だけ変える・縦向きの上下ドラッグは横幅・膜ドラッグの感度と表示・枠ドラッグの滑らかさを直した版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 16:50（枠と膜のドラッグ反映を1フレーム1回に間引いて滑らかにした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -4052,7 +4052,8 @@ shootBtn.addEventListener('pointerdown', (e)=>{
     wrapH: Math.max(1, videoRect.height),
     baseMask: activeMaskSide() === 'left' ? maskLeft : maskRight,
     baseH: (frameRect.height / Math.max(1, videoRect.height)) * 100,
-    baseW: (frameRect.width / Math.max(1, videoRect.width)) * 100
+    baseW: (frameRect.width / Math.max(1, videoRect.width)) * 100,
+    lastDx: 0, lastDy: 0, rafId: 0
   };
   // ドラッグ中は枠のサイズ変化アニメーションを切る(付いたままだと
   // 0.15秒遅れで追いかける形になり、指の動きとズレて滑らかに見えない)
@@ -4067,8 +4068,25 @@ shootBtn.addEventListener('pointerdown', (e)=>{
 });
 shootBtn.addEventListener('pointermove', (e)=>{
   if(!shutterDrag) return;
-  const dx = e.clientX - shutterDrag.startX;
-  const dy = e.clientY - shutterDrag.startY;
+  shutterDrag.lastDx = e.clientX - shutterDrag.startX;
+  shutterDrag.lastDy = e.clientY - shutterDrag.startY;
+  // 反映はアニメーションフレームに合わせて1フレーム1回だけにする。
+  // pointermoveは画面の更新より速く届くことがあり、そのたびに描き直すと
+  // 描画が追いつかずカクつくため
+  if(!shutterDrag.rafId){
+    shutterDrag.rafId = requestAnimationFrame(()=>{
+      if(!shutterDrag) return;
+      shutterDrag.rafId = 0;
+      applyShutterDrag();
+    });
+  }
+});
+
+/* ドラッグ中の最新の指の位置を、膜と枠へまとめて反映する */
+function applyShutterDrag(){
+  if(!shutterDrag) return;
+  const dx = shutterDrag.lastDx || 0;
+  const dy = shutterDrag.lastDy || 0;
   // 左右：膜の端を指の動きに追従させる。感度は枠の幅ではなく画面の幅を
   // 基準にする(縦向きの枠は細いので、枠基準だと少しの動きで膜が
   // 0%や100%に飛んでしまい、効いていないように見えたため)
@@ -4086,26 +4104,33 @@ shootBtn.addEventListener('pointermove', (e)=>{
   if(frameEl.classList.contains('vertical')){
     const newW = Math.max(5, Math.min(98, shutterDrag.baseW - (dy / shutterDrag.wrapW) * 100));
     frameEl.style.width = newW + '%';
-    const newWR = Math.round(newW);
-    if(String(newWR) !== customWidthSlider.value){
-      customWidthSlider.value = newWR;
-      customWidthVal.textContent = newWR + '%';
-    }
   }else{
     const newH = Math.max(5, Math.min(98, shutterDrag.baseH - (dy / shutterDrag.wrapH) * 100));
     frameEl.style.height = newH + '%';
-    const newHR = Math.round(newH);
-    if(String(newHR) !== customHeightSlider.value){
-      customHeightSlider.value = newHR;
-      customHeightVal.textContent = newHR + '%';
-    }
   }
   updateMaskDisplays();
-});
+}
 function endShutterDrag(shoot){
   if(!shutterDrag) return;
+  if(shutterDrag.rafId) cancelAnimationFrame(shutterDrag.rafId);
+  applyShutterDrag(); // 保留中の最後の動きを、撮影前に反映しきる
   shutterDrag = null;
   frameEl.style.transition = ''; // 枠のアニメーションを元に戻す
+  // カスタム枠のスライダー表示を、最終的な大きさに合わせておく
+  // (ドラッグ中に毎回書き換えると描画の邪魔になるので、ここで1回だけ)
+  if(frameEl.classList.contains('vertical')){
+    const w = parseFloat(frameEl.style.width);
+    if(!isNaN(w)){
+      customWidthSlider.value = Math.round(w);
+      customWidthVal.textContent = Math.round(w) + '%';
+    }
+  }else{
+    const h = parseFloat(frameEl.style.height);
+    if(!isNaN(h)){
+      customHeightSlider.value = Math.round(h);
+      customHeightVal.textContent = Math.round(h) + '%';
+    }
+  }
   refreshQaChrome(); // ホールド中だけ出していた膜プレビューを畳む
   saveQaSettings();
   if(shoot){
