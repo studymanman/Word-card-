@@ -141,12 +141,12 @@
   #frame.size-small { width:50%; height:22%; }
   #frame.size-thin  { width:90%; height:10%; } /* 極細：横幅は広いまま厚みだけ薄くする */
 
-  /* 縦向きモード：横向きの width/height をそのまま入れ替えている。
-     つまり縦向きでも「厚み(横幅)」は固定で、長さ(高さ)だけが変わる */
-  #frame.vertical.size-large { width:22%; height:96%; }
-  #frame.vertical.size-medium{ width:22%; height:75%; }
-  #frame.vertical.size-small { width:22%; height:50%; }
-  #frame.vertical.size-thin  { width:10%; height:90%; }
+  /* 縦向きモード：高さは中(75%)と小(50%)の間=62%で全サイズ固定にし、
+     サイズ違いは横幅だけで付ける(古文の単語など縦書き用) */
+  #frame.vertical.size-large { width:32%; height:62%; }
+  #frame.vertical.size-medium{ width:22%; height:62%; }
+  #frame.vertical.size-small { width:14%; height:62%; }
+  #frame.vertical.size-thin  { width:9%;  height:62%; }
 
   #cameraHint{
     position:absolute;
@@ -1235,7 +1235,7 @@
   <div id="maskHintCap" class="sub" style="display:none; margin:6px 0 0;">
     カメラ枠のふちに出た白いつまみを指でつかんでドラッグすると、隠す範囲(グレーの膜)を伸び縮みできます。
   </div>
-  <div class="sub">シャッターを押したまま左右に動かすと隠す膜の範囲、上下に動かすと枠の縦幅が変わります。指を離すと撮影します（膜は横向きの枠では右から、縦向きの枠では左からだけ出ます）。</div>
+  <div class="sub">シャッターを押したまま左右に動かすと隠す膜の範囲、上下に動かすと枠の大きさ（横向きでは縦幅、縦向きでは横幅）が変わります。指を離すと撮影します（膜は横向きの枠では右から、縦向きの枠では左からだけ出ます）。</div>
   <div class="row">
     <button id="shuffleBtn" class="btn-secondary" style="flex:1">並び順をランダムにする</button>
     <button id="selectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 16:10（AIカードPDFを左=英語・右=訳の小さい文字に・シャッター長押しドラッグで膜と枠の調整・膜は横=右のみ縦=左のみにした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 16:35（縦向きは高さ62%固定で幅だけ変える・縦向きの上下ドラッグは横幅・膜ドラッグの感度と表示・枠ドラッグの滑らかさを直した版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -2218,17 +2218,24 @@ function enforceMaskSide(){
   refreshQaChrome();
   saveQaSettings();
 }
-/* 膜プレビューとつまみの表示：編集モードONのとき、有効な側だけ出す */
+/* シャッターボタンをホールド中かどうか(撮影まわりのコードで中身を入れる)。
+   ホールド中も膜プレビューを出す必要があるので、宣言だけここに置く */
+let shutterDrag = null;
+
+/* 膜プレビューとつまみの表示：編集モードONのとき、有効な側だけ出す。
+   膜プレビューは、シャッターをホールドして膜を動かしているときにも出す
+   (出ていないと、動かしても膜が見えず「効いていない」ように見えるため) */
 function refreshQaChrome(){
   const side = activeMaskSide();
+  const previewOn = qaEnabled || !!shutterDrag;
   const show = (el, on)=>{ el.style.display = on ? 'block' : 'none'; };
   show(previewMaskTop, false);
   show(previewMaskBottom, false);
   show(maskHandleTop, false);
   show(maskHandleBottom, false);
-  show(previewMaskLeft, qaEnabled && side === 'left');
+  show(previewMaskLeft, previewOn && side === 'left');
   show(maskHandleLeft, qaEnabled && side === 'left');
-  show(previewMaskRight, qaEnabled && side === 'right');
+  show(previewMaskRight, previewOn && side === 'right');
   show(maskHandleRight, qaEnabled && side === 'right');
 }
 
@@ -4029,9 +4036,9 @@ function captureShot(){
    シャッターボタンを押したまま指を動かすと、
    ・左右：隠す膜の端が指について動き、膜の範囲が変わる
      (横向きの枠は右からの膜、縦向きの枠は左からの膜だけが動く)
-   ・上下：枠の縦幅が変わる(上へ動かすほど長く、下へ動かすほど短く)
+   ・上下：枠の大きさが変わる(横向きの枠では縦幅、縦向きの枠では横幅。
+     どちらも上へ動かすほど大きく、下へ動かすほど小さい)
    指を離すと、その状態で撮影する。普通にタップしたときも離した瞬間に撮れる */
-let shutterDrag = null;
 let shutterClickSwallow = false;
 shootBtn.addEventListener('pointerdown', (e)=>{
   if(shootBtn.disabled) return;
@@ -4041,12 +4048,16 @@ shootBtn.addEventListener('pointerdown', (e)=>{
   const videoRect = video.getBoundingClientRect();
   shutterDrag = {
     startX: e.clientX, startY: e.clientY,
-    frameW: Math.max(1, frameRect.width),
     wrapW: Math.max(1, videoRect.width),
     wrapH: Math.max(1, videoRect.height),
     baseMask: activeMaskSide() === 'left' ? maskLeft : maskRight,
-    baseH: (frameRect.height / Math.max(1, videoRect.height)) * 100
+    baseH: (frameRect.height / Math.max(1, videoRect.height)) * 100,
+    baseW: (frameRect.width / Math.max(1, videoRect.width)) * 100
   };
+  // ドラッグ中は枠のサイズ変化アニメーションを切る(付いたままだと
+  // 0.15秒遅れで追いかける形になり、指の動きとズレて滑らかに見えない)
+  frameEl.style.transition = 'none';
+  refreshQaChrome(); // ホールド中は膜プレビューを出す
   // カスタム枠に切り替えたときに幅が飛ばないよう、今の幅もスライダーへ寄せておく
   const wPct = Math.max(5, Math.min(100, Math.round((frameRect.width / Math.max(1, videoRect.width)) * 100)));
   if(String(wPct) !== customWidthSlider.value){
@@ -4058,8 +4069,10 @@ shootBtn.addEventListener('pointermove', (e)=>{
   if(!shutterDrag) return;
   const dx = e.clientX - shutterDrag.startX;
   const dy = e.clientY - shutterDrag.startY;
-  // 左右：膜の端を指の動きに追従させる
-  const dPct = (dx / shutterDrag.frameW) * 100;
+  // 左右：膜の端を指の動きに追従させる。感度は枠の幅ではなく画面の幅を
+  // 基準にする(縦向きの枠は細いので、枠基準だと少しの動きで膜が
+  // 0%や100%に飛んでしまい、効いていないように見えたため)
+  const dPct = (dx / shutterDrag.wrapW) * 100;
   maskTop = 0; maskBottom = 0;
   if(activeMaskSide() === 'left'){
     maskLeft = Math.round(Math.max(0, Math.min(100, shutterDrag.baseMask + dPct)));
@@ -4068,19 +4081,32 @@ shootBtn.addEventListener('pointermove', (e)=>{
     maskRight = Math.round(Math.max(0, Math.min(100, shutterDrag.baseMask - dPct)));
     maskLeft = 0;
   }
-  // 上下：枠の縦幅を変える(上に動かすほど長く)
-  const newH = Math.max(5, Math.min(98, shutterDrag.baseH - (dy / shutterDrag.wrapH) * 100));
-  frameEl.style.height = newH + '%';
-  const newHR = Math.round(newH);
-  if(String(newHR) !== customHeightSlider.value){
-    customHeightSlider.value = newHR;
-    customHeightVal.textContent = newHR + '%';
+  // 上下：横向きの枠では縦幅、縦向きの枠では横幅を変える
+  // (どちらも、上に動かすほど大きく、下に動かすほど小さく)
+  if(frameEl.classList.contains('vertical')){
+    const newW = Math.max(5, Math.min(98, shutterDrag.baseW - (dy / shutterDrag.wrapW) * 100));
+    frameEl.style.width = newW + '%';
+    const newWR = Math.round(newW);
+    if(String(newWR) !== customWidthSlider.value){
+      customWidthSlider.value = newWR;
+      customWidthVal.textContent = newWR + '%';
+    }
+  }else{
+    const newH = Math.max(5, Math.min(98, shutterDrag.baseH - (dy / shutterDrag.wrapH) * 100));
+    frameEl.style.height = newH + '%';
+    const newHR = Math.round(newH);
+    if(String(newHR) !== customHeightSlider.value){
+      customHeightSlider.value = newHR;
+      customHeightVal.textContent = newHR + '%';
+    }
   }
   updateMaskDisplays();
 });
 function endShutterDrag(shoot){
   if(!shutterDrag) return;
   shutterDrag = null;
+  frameEl.style.transition = ''; // 枠のアニメーションを元に戻す
+  refreshQaChrome(); // ホールド中だけ出していた膜プレビューを畳む
   saveQaSettings();
   if(shoot){
     shutterClickSwallow = true; // 直後に来る click では二重に撮らない
