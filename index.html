@@ -1250,7 +1250,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 14:50（見出しは列幅に＋手動両面の表裏2セット版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 15:00（白黒の赤文字をもっと濃くした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -4219,11 +4219,12 @@ function inkProcessImage(dataUrl){
           const r = px[i], gch = px[i + 1], b = px[i + 2];
           const lum = 0.299 * r + 0.587 * gch + 0.114 * b;
           // 赤・青などの色文字は輝度だけだと薄くなってしまうので、
-          // 最も暗いチャンネルとの中間も見て「色の濃さ」を拾う
+          // 最も暗いチャンネルを主役にして「色の濃さ」を拾う
+          // (赤は緑・青チャンネルがほぼ0なので、ほぼ真っ黒に落ちる)
           const minv = Math.min(r, gch, b);
-          const combined = Math.min(lum, (minv + lum) / 2);
+          const combined = Math.min(lum, minv * 0.75 + lum * 0.25);
           // 地(明るい部分)は純白に飛ばし、文字側は暗めにはっきり出す
-          const out = combined >= 205 ? 255 : Math.round(35 + (combined / 205) * 210);
+          const out = combined >= 205 ? 255 : Math.round(20 + (combined / 205) * 215);
           px[i] = out; px[i + 1] = out; px[i + 2] = out;
         }
         cx.putImageData(id, 0, 0);
@@ -4291,7 +4292,7 @@ function makePdfTextImage(shot){
   cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
   cx.fillRect(0, 0, cv.width, cv.height);
   cx.font = fs + 'px sans-serif';
-  cx.fillStyle = pdfBwActive ? '#404040' : '#26241f';
+  cx.fillStyle = pdfBwActive ? '#2e2e2e' : '#26241f';
   cx.textBaseline = 'top';
   wrapped.forEach((l, i)=> cx.fillText(l, pad, pad + i * lh));
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: cv.height / cv.width };
@@ -4309,7 +4310,7 @@ function makePdfWordRowImage(shot){
   const cv = document.createElement('canvas');
   cv.width = pxW; cv.height = pxH;
   const cx = cv.getContext('2d');
-  const ink = pdfBwActive ? '#404040' : '#26241f';
+  const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
   cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
   cx.fillRect(0, 0, pxW, pxH);
   cx.strokeStyle = pdfBwActive ? '#9a9a9a' : 'rgba(38,36,31,0.45)';
@@ -4376,7 +4377,7 @@ function makePdfSectionHeaderImage(title, subLabel){
   cx.fillStyle = pdfBwActive ? '#9a9a9a' : '#d9481f';
   cx.fillRect(0, 0, 28, pxH);
   cx.font = '700 84px sans-serif';
-  cx.fillStyle = pdfBwActive ? '#404040' : '#26241f';
+  cx.fillStyle = pdfBwActive ? '#2e2e2e' : '#26241f';
   cx.textBaseline = 'top';
   let text = title + (subLabel ? '　' + subLabel : '');
   while(text.length > 1 && cx.measureText(text).width > pxW - 130) text = text.slice(0, -1);
