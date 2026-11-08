@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 20:45（AIの失敗理由を正しく表示・回数制限では次のモデルを試す・モデル順を空きやすい順に変えた版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-09 00:10（蓄積は書き出すだけで前回分が自動で空白になる版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -2671,16 +2671,16 @@ deckBulkPdfBtn.addEventListener('click', async ()=>{
     const title = input.trim() || ('選んだセット（' + targets.length + '個）');
     const all = [];
     targets.forEach(d => (d.shots || []).forEach(s => all.push(s)));
-    startPdfExport([{ title: title, shots: shuffledCopy(all) }], title.replace(/[\\/:*?"<>|]/g, '_') + '.pdf');
+    startPdfExport([{ title: title, shots: shuffledCopy(all) }], title.replace(/[\\/:*?"<>|]/g, '_') + '.pdf', targets.filter(d=> d.accum));
     return;
   }
   if(order === 'each'){
     const sections = targets.map(d => ({ title: d.name, shots: shuffledCopy(d.shots) }));
-    startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf');
+    startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum));
     return;
   }
   const sections = targets.map(d => ({ title: d.name, shots: d.shots }));
-  startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf');
+  startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum));
 });
 
 /* 選んだセットの画像を、セットごとのフォルダに分けて1つのZIPにする */
@@ -2913,7 +2913,7 @@ async function renderDeckList(){
           { label:'データ（JSON）で書き出す', value:'json' }
         ]);
         if(kind === 'pdf'){
-          startPdfExport([{ title: null, shots: d.shots }], d.name + '.pdf', d.accum ? d : null);
+          startPdfExport([{ title: null, shots: d.shots }], d.name + '.pdf', d.accum ? [d] : null);
         }else if(kind === 'zip'){
           setStatus('画像をまとめています…');
           try{
@@ -4778,7 +4778,7 @@ function buildPdfSections(sections, filename, opts){
       // (幅いっぱいにすると隣の列が空いて無駄になるため)
       const cardItems = section.shots.map(s=>{
         // 「新しい分だけ」印刷のとき、印刷済みカードは場所だけ確保して空白にする
-        if(opts && opts.skipPrinted && s.printed){
+        if(opts && opts.blankSet && opts.blankSet.has(s)){
           let aspect;
           if(opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
             aspect = makePdfWordRowImage({ textEn:'', textJa:'' }).aspect;
@@ -5542,9 +5542,38 @@ async function markAccumPrinted(accumDeck, drawn){
   }catch(e){ console.error(e); }
 }
 
-async function startPdfExport(sections, filename, accumDeck){
+async function startPdfExport(sections, filename, accumDecks){
   const totalShots = sections.reduce((n, s)=> n + ((s.shots || []).length), 0);
   if(totalShots === 0) return;
+
+  // 蓄積ルームは、他のセットと同じ操作で書き出すだけで、
+  // 前回印刷した分は自動で空白になり、新しい分だけが印刷される
+  // (範囲は聞かない。全印刷済みで新しい分が無ければ、その旨を知らせる)
+  const blankSet = new Set();
+  const accumDrawn = new Map(); // 蓄積デッキ -> 今回印刷するカード
+  if(accumDecks && accumDecks.length){
+    accumDecks.forEach(d=>{
+      const drawn = [];
+      (d.shots || []).forEach(s=>{
+        if(s.printed) blankSet.add(s);
+        else drawn.push(s);
+      });
+      accumDrawn.set(d, drawn);
+    });
+    if(sections.length === 1 && accumDecks.length === 1 && !sections[0].title){
+      const only = accumDrawn.get(accumDecks[0]);
+      if(only && only.length === 0 && (accumDecks[0].shots || []).length > 0){
+        showToast('新しいカードがありません（全部印刷済みです。全て刷り直したいときは「その他」→「印刷済みをリセット」）', true);
+        return;
+      }
+    }
+  }
+  const markAccum = async ()=>{
+    for(const [d, drawn] of accumDrawn){
+      await markAccumPrinted(d, drawn);
+    }
+  };
+
   const mode = await pickFromList('PDFの作り方を選んでください', [
     { label:'そのまま（写真）', value:'asis' },
     { label:'白黒（インク節約）', value:'bw' },
@@ -5552,32 +5581,9 @@ async function startPdfExport(sections, filename, accumDeck){
   ]);
   if(mode === null) return;
 
-  // 蓄積ルームのときだけ「新しい分だけ(印刷済みは空白)」が選べる
-  let skipPrinted = false;
-  let drawnShots = [];
-  sections.forEach(s=> (s.shots || []).forEach(sh=> drawnShots.push(sh)));
-  if(accumDeck){
-    const printedCount = drawnShots.filter(s=> s.printed).length;
-    if(printedCount > 0){
-      const scope = await pickFromList('印刷する範囲を選んでください', [
-        { label:'全部印刷する', value:'all' },
-        { label:'新しい分だけ（印刷済みの位置は空白）', value:'new' }
-      ]);
-      if(scope === null) return;
-      skipPrinted = (scope === 'new');
-      if(skipPrinted){
-        drawnShots = drawnShots.filter(s=> !s.printed);
-        if(drawnShots.length === 0){
-          showToast('新しいカードがありません', true);
-          return;
-        }
-      }
-    }
-  }
-
   if(mode === 'asis'){
-    const ok = buildPdfSections(sections, filename, { mode:'asis', skipPrinted: skipPrinted });
-    if(ok){ showToast('PDFを作成しました'); await markAccumPrinted(accumDeck, drawnShots); }
+    const ok = buildPdfSections(sections, filename, { mode:'asis', blankSet: blankSet });
+    if(ok){ showToast('PDFを作成しました'); await markAccum(); }
     return;
   }
 
@@ -5598,9 +5604,9 @@ async function startPdfExport(sections, filename, accumDeck){
       hidePdfProg();
     }
     pdfBwActive = true;
-    const ok = buildPdfSections(sections, filename, { mode:'bw', skipPrinted: skipPrinted });
+    const ok = buildPdfSections(sections, filename, { mode:'bw', blankSet: blankSet });
     pdfBwActive = false;
-    if(ok){ showToast('白黒のPDFを作成しました'); await markAccumPrinted(accumDeck, drawnShots); }
+    if(ok){ showToast('白黒のPDFを作成しました'); await markAccum(); }
     return;
   }
 
@@ -5613,6 +5619,7 @@ async function startPdfExport(sections, filename, accumDeck){
   const textMap = new Map();
   sections.forEach(s=> (s.shots || []).forEach(sh=>{
     if(sh.answerText) return; // AIカードは対象外
+    if(blankSet.has(sh)) return; // 空白になるカードは読み取らない
     const en = (sh.textEn || '').trim(), ja = (sh.textJa || '').trim();
     if(en || ja) textMap.set(sh, { en: en, ja: ja }); // 保存済みの文字版を使う
     else targets.push(sh); // 無いものだけ、この場で読み取る
@@ -5654,12 +5661,12 @@ async function startPdfExport(sections, filename, accumDeck){
     setPdfProg('AIが写真の文字を読んでいます…（' + (done + failed) + ' / ' + targets.length + '枚）');
   }
   hidePdfProg();
-  const ok = buildPdfSections(sections, filename, { mode:'text', textMap: textMap, skipPrinted: skipPrinted });
+  const ok = buildPdfSections(sections, filename, { mode:'text', textMap: textMap, blankSet: blankSet });
   if(ok){
     showToast(failed > 0
       ? 'PDFを作成しました（' + failed + '枚は読み取れず写真のままです）'
       : '文字化したPDFを作成しました');
-    await markAccumPrinted(accumDeck, drawnShots);
+    await markAccum();
   }
 }
 
