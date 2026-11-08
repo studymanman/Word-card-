@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-09 00:10（蓄積は書き出すだけで前回分が自動で空白になる版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-09 00:25（AIカードは印刷でも写真なし・左は原型で出す版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -4526,10 +4526,9 @@ document.querySelectorAll('.tab-btn').forEach(b=>{
 */
 /* AIカードの答え(日本語の意味)をPDFに印刷するためのテキスト画像化。
    jsPDFの標準フォントは日本語を出せないため、canvasに描いて画像にする */
-/* AIカードの文字部分をPDFに印刷するための画像。
-   以前は訳だけを大きな文字で写真の下に置いていたが、「文字が大きい」
-   「左に英語・右に訳で並べたい」という要望で、2段組みに変更した。
-   左=英語(見たままの形 surface、無ければ原型 word)、右=訳＋ヒント */
+/* AIカードをPDFに印刷するための文字カード画像。
+   写真は印刷せず、この文字カードだけで出す。
+   左=英語(原型 word、無ければ見たままの形 surface)、右=訳＋ヒント */
 function makePdfTextImage(shot){
   const pxW = 1400;
   const pad = 36;
@@ -4565,7 +4564,7 @@ function makePdfTextImage(shot){
     });
     return lines;
   }
-  const enLines = wrap((shot.surface || shot.word || '').trim(), divX - pad - 24, enFont).slice(0, 3);
+  const enLines = wrap((shot.word || shot.surface || '').trim(), divX - pad - 24, enFont).slice(0, 3);
   const jaLines = wrap(shot.answerText || '', pxW - divX - 24 - pad, jaFont).slice(0, 3);
   const hintLines = shot.hint ? wrap('ヒント：' + shot.hint, pxW - divX - 24 - pad, hintFont).slice(0, 2) : [];
   const rightH = jaLines.length * jaLH + (hintLines.length ? 10 + hintLines.length * hintLH : 0);
@@ -4783,7 +4782,7 @@ function buildPdfSections(sections, filename, opts){
           if(opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
             aspect = makePdfWordRowImage({ textEn:'', textJa:'' }).aspect;
           }else{
-            aspect = (s.height / s.width) + (s.answerText ? makePdfTextImage(s).aspect : 0);
+            aspect = s.answerText ? makePdfTextImage(s).aspect : (s.height / s.width);
           }
           return { kind:'blank', aspect: aspect };
         }
@@ -4792,7 +4791,11 @@ function buildPdfSections(sections, filename, opts){
           const t = opts.textMap.get(s);
           return { kind:'text', img: makePdfWordRowImage({ textEn: t.en, textJa: t.ja }) };
         }
-        return { kind:'photo', shot:s, textImg: s.answerText ? makePdfTextImage(s) : null };
+        // AIカードは、調べたときの写真は印刷せず、文字カードだけで出す
+        if(s.answerText){
+          return { kind:'text', img: makePdfTextImage(s) };
+        }
+        return { kind:'photo', shot:s, textImg: null };
       });
       const items = section.title
         ? [{ kind:'header', img: makePdfSectionHeaderImage(section.title, '（全' + section.shots.length + '枚）') }].concat(cardItems)
