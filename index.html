@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-08 16:50（枠と膜のドラッグ反映を1フレーム1回に間引いて滑らかにした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-08 19:30（文字版の自動作成はWi-Fi時のみ・進捗表示は保存パネル内へ・暗記タブのモードボタン撤去・AIカードの表は原型の文字カードにした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1290,18 +1290,9 @@
 
 <div class="tab-page" data-tab="study">
 
-<!-- ===== 一問一答（フラッシュカード）機能 =====
-     PDFにはせず、専用の「練習画面」を別に開いて使う機能。
-     隠す範囲(上下左右)は、下のスライダーではなく、カメラ枠の
-     ふち(境界線)を直接タップ＆ドラッグして伸び縮みさせる方式にした -->
-<div class="panel">
-  <div class="row">
-    <button id="qaToggleBtn" class="btn-toggle" style="flex:1">一問一答モード（隠す範囲の編集）を有効にする</button>
-  </div>
-  <div id="maskHint" class="sub" style="display:none; margin:6px 0 0;">
-    カメラ枠のふちに出た白いつまみを指でつかんでドラッグすると、隠す範囲(グレーの膜)を伸び縮みできます。
-  </div>
-</div>
+<!-- 一問一答モード(隠す範囲の編集)のボタンは撮影タブ側にだけ置く
+     (膜のつまみはカメラ枠の上に出るので、撮影タブにある方が自然なため。
+     暗記タブ側にあった同ボタンは重複するので撤去した) -->
 
 <!-- ===== 一問一答セット(名前をつけて保存) =====
      今撮っている写真をひとまとまりの「セット」として名前をつけて保存し、
@@ -1322,6 +1313,15 @@
     <button id="saveAccumBtn" class="btn-secondary" style="flex:1" disabled>蓄積ルームに追加（長文で出た単語用・名前つけ不要）</button>
   </div>
   <div class="sub">蓄積ルームは1つだけの特別な置き場です。長文で出た単語カードを日々ここへ貯めていくと、印刷のときに「新しい分だけ（印刷済みの位置は空白）」のPDFが作れるので、同じ紙に続きを印刷できます。</div>
+  <!-- 文字版の自動作成の状態表示。以前は画面下部に固定バーで出していたが、
+       ボタンの上に被って押せなくなるため、このパネルの中に出すようにした -->
+  <div id="bgConvBar" style="display:none; margin-top:10px; border-top:1px solid rgba(0,0,0,0.08); padding-top:10px;">
+    <div class="sub" id="bgConvText" style="margin:0 0 6px;"></div>
+    <div class="row">
+      <button id="bgConvStartBtn" class="btn-secondary" style="flex:1; display:none;">文字版をいま作る</button>
+      <button id="bgConvStopBtn" class="btn-secondary" style="flex:1; display:none;">作成を止める</button>
+    </div>
+  </div>
 </div>
 
 </div><!-- /tab-page: study -->
@@ -2247,7 +2247,7 @@ function setQaEnabled(on){
   [maskHint, maskHintCap].forEach(h=>{ if(h) h.style.display = qaEnabled ? 'block' : 'none'; });
   refreshQaChrome();
 }
-qaToggleBtn.addEventListener('click', ()=> setQaEnabled(!qaEnabled));
+if(qaToggleBtn) qaToggleBtn.addEventListener('click', ()=> setQaEnabled(!qaEnabled));
 if(qaToggleBtnCap) qaToggleBtnCap.addEventListener('click', ()=> setQaEnabled(!qaEnabled));
 
 loadQaSettings();
@@ -3298,10 +3298,14 @@ function renderQaCard(filtered){
   qaCardImg.src = shot.dataUrl;
   const qaTextCardEl = document.getElementById('qaTextCard');
   const qaIsTextCard = !!(qaPractice.textMode && ((shot.textEn || '').trim() || (shot.textJa || '').trim()));
-  if(qaIsTextCard){
+  // AIカードは、切り取った写真をそのまま表に出さず、原型(lemma)の
+  // 文字カードで出す(保存済みのAIカードも、保存してある原型から
+  // 表示するので自動でこの形になる)
+  const qaAiLemma = shot.answerText ? ((shot.word || '').trim() || (shot.surface || '').trim()) : '';
+  if(qaIsTextCard || qaAiLemma){
     qaCardWrap.style.display = 'none';
     qaTextCardEl.style.display = 'block';
-    qaTextCardEl.textContent = (shot.textEn || '').trim();
+    qaTextCardEl.textContent = qaAiLemma || (shot.textEn || '').trim();
   }else{
     qaCardWrap.style.display = '';
     qaTextCardEl.style.display = 'none';
@@ -3677,15 +3681,17 @@ function renderQaList(filtered){
     // そこで imgWrap 自体の横幅に、縦横比から逆算した上限を付けることで、
     // 画像は常に「幅いっぱい＝imgWrapの境界」のまま、高さだけを抑える
     const isTextCard = !!(qaPractice.textMode && ((shot.textEn || '').trim() || (shot.textJa || '').trim()));
-    if(shot.width && shot.height && !isTextCard){
+    // AIカードは一覧でも原型の文字カードで出す(1枚表示と同じ)
+    const aiLemma = shot.answerText ? ((shot.word || '').trim() || (shot.surface || '').trim()) : '';
+    if(shot.width && shot.height && !isTextCard && !aiLemma){
       const QA_LIST_MAX_H = 340; // px。1画面に2〜3枚ほど収まる高さが目安
       imgWrap.style.maxWidth = Math.round(QA_LIST_MAX_H * (shot.width / shot.height)) + 'px';
       imgWrap.style.margin = '0 auto';
     }
-    if(isTextCard){
+    if(isTextCard || aiLemma){
       const tx = document.createElement('div');
       tx.className = 'qa-list-text';
-      tx.textContent = (shot.textEn || '').trim();
+      tx.textContent = aiLemma || (shot.textEn || '').trim();
       imgWrap.appendChild(tx);
     }else{
       const img = document.createElement('img');
@@ -5674,9 +5680,42 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible' && bgConvRunning) acquireWakeLock();
 });
 
-async function kickBgTextConvert(){
+/* ---------- 文字版の自動作成：状態表示とWi-Fi判定 ----------
+   状態表示は、画面下部に浮く固定バーではなく、暗記タブの保存パネルの中
+   (#bgConvBar)に出す。固定バーは下のボタンの上に被って押せなくなるため。
+   自動作成はWi-Fiのときだけにする(写真をAIへ送るので通信量が大きい)。
+   ただしiPhoneのSafariなど接続の種類を判別できないブラウザでは自動で
+   始めず、パネルの「いま作る」ボタンで手動で始める形にする */
+const bgConvBar = document.getElementById('bgConvBar');
+const bgConvText = document.getElementById('bgConvText');
+const bgConvStartBtn = document.getElementById('bgConvStartBtn');
+const bgConvStopBtn = document.getElementById('bgConvStopBtn');
+let bgConvStop = false;
+function showBgConvPanel(text, mode){
+  if(!bgConvBar) return;
+  if(!mode){ bgConvBar.style.display = 'none'; return; }
+  bgConvBar.style.display = 'block';
+  if(bgConvText) bgConvText.textContent = text;
+  if(bgConvStartBtn) bgConvStartBtn.style.display = mode === 'wait' ? '' : 'none';
+  if(bgConvStopBtn) bgConvStopBtn.style.display = mode === 'run' ? '' : 'none';
+}
+function bgConvNetworkAllowed(){
+  const c = navigator.connection;
+  if(c && typeof c.type === 'string' && c.type) return (c.type === 'wifi' || c.type === 'ethernet');
+  return null; // 判別できない(iOS Safariなど)
+}
+if(bgConvStartBtn) bgConvStartBtn.addEventListener('click', ()=> kickBgTextConvert(true));
+if(bgConvStopBtn) bgConvStopBtn.addEventListener('click', ()=>{
+  bgConvStop = true;
+  if(bgConvText) bgConvText.textContent = '止めています…';
+});
+if(navigator.connection && navigator.connection.addEventListener){
+  navigator.connection.addEventListener('change', ()=> kickBgTextConvert());
+}
+
+async function kickBgTextConvert(manual){
   if(bgConvRunning) return;
-  if(!aiGetKey()) return;
+  if(!aiGetKey()){ showBgConvPanel('', null); return; }
   bgConvRunning = true;
   try{
     const decks = await loadDecks();
@@ -5686,12 +5725,26 @@ async function kickBgTextConvert(){
       const t = (d.shots || []).filter(s=> !s.answerText && !((s.textEn || '').trim() || (s.textJa || '').trim()));
       if(t.length){ jobs.push({ deck: d, targets: t }); total += t.length; }
     });
-    if(total === 0) return;
+    if(total === 0){ showBgConvPanel('', null); return; }
+    if(!manual){
+      const allowed = bgConvNetworkAllowed();
+      if(allowed !== true){
+        showBgConvPanel('文字版がまだのカードが' + total + '枚あります。' +
+          (allowed === false
+            ? 'Wi-Fi接続のときだけ自動で作ることにしているので、いまは止めています。'
+            : 'この端末ではWi-Fiかどうか判別できないため、自動では作りません。作るときはWi-Fiにつないでから押してください。'),
+          'wait');
+        return;
+      }
+    }
+    bgConvStop = false;
     acquireWakeLock();
     let done = 0, failed = 0;
-    showPdfProg('文字版カードを裏で作っています…（0 / ' + total + '枚）');
+    showBgConvPanel('文字版カードを裏で作っています…（0 / ' + total + '枚）', 'run');
     for(const job of jobs){
+      if(bgConvStop) break;
       for(let i = 0; i < job.targets.length; i += 8){
+        if(bgConvStop) break;
         const batch = job.targets.slice(i, i + 8);
         const parts = [];
         batch.forEach((w, j)=>{
@@ -5720,18 +5773,24 @@ async function kickBgTextConvert(){
           failed += batch.length;
         }
         await saveDeckToStorage(job.deck).catch(err=> console.error(err));
-        setPdfProg('文字版カードを裏で作っています…（' + (done + failed) + ' / ' + total + '枚）');
+        if(bgConvText) bgConvText.textContent = '文字版カードを裏で作っています…（' + (done + failed) + ' / ' + total + '枚）';
         await new Promise(r=> setTimeout(r, 400));
       }
     }
-    hidePdfProg();
+    if(bgConvStop){
+      showBgConvPanel('途中で止めました。残りは次に作るときに続きから作ります。', 'wait');
+    }else if(failed > 0){
+      showBgConvPanel(failed + '枚は作れませんでした。次に作るときにまた試します。', 'wait');
+    }else{
+      showBgConvPanel('', null);
+    }
     if(done > 0){
       showToast('文字版カードを作りました（' + done + '枚）' + (failed > 0 ? '／' + failed + '枚は失敗' : ''));
       refreshBrowseView();
     }
   }catch(e){
     console.error(e);
-    hidePdfProg();
+    showBgConvPanel('', null);
   }finally{
     releaseWakeLock();
     bgConvRunning = false;
