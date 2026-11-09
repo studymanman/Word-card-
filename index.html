@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-09 23:55（文字カードをAIカードと同じ寸法にして詰めた版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-10 01:15（たまちんに変換を頼める依頼箱を追加した版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1279,10 +1279,24 @@
   <div class="row" style="margin-top:10px;">
     <button id="aiLookupBtn" class="btn-main" style="flex:1" disabled>AIで意味を調べる</button>
   </div>
+  <div class="row" style="margin-top:6px;">
+    <button id="aiAskBtn" class="btn-secondary" style="flex:1" disabled>たまちんに頼む（切り取った単語を依頼箱へ）</button>
+  </div>
   <div class="sub" id="aiStatus"></div>
   <div id="aiResults"></div>
   <div class="row" style="margin-top:10px;">
     <button id="aiAddBtn" class="btn-main" style="flex:1; display:none;">この内容でカードに追加する</button>
+  </div>
+  <div class="section-label" style="margin-top:14px;">たまちんへの依頼箱</div>
+  <div class="sub">「たまちんに頼む」に入れた単語は、ここから依頼パック（1つのファイル）として書き出せます。そのファイルをたまちんに送ると、意味を調べた結果ファイルが返ってくるので、「結果を読み込む」で取り込めば、そのままカードになります。Geminiの回数制限を使いません。</div>
+  <div class="sub" id="aiAskState" style="margin-top:6px;">依頼箱：0件</div>
+  <div class="row" style="margin-top:6px;">
+    <button id="aiPackExportBtn" class="btn-main" style="flex:1">依頼パックを書き出す</button>
+    <button id="aiPackImportBtn" class="btn-main" style="flex:1">結果を読み込む</button>
+  </div>
+  <input type="file" id="aiPackFile" accept=".json,application/json" style="display:none">
+  <div class="row" style="margin-top:6px;">
+    <button id="aiAskClearBtn" class="btn-secondary" style="flex:1">依頼箱を空にする</button>
   </div>
 </div>
 
@@ -5263,6 +5277,8 @@ function aiRenderTray(){
   });
   aiTrayCountEl.textContent = aiWords.length;
   aiLookupBtn.disabled = aiWords.length === 0;
+  const askBtn = document.getElementById('aiAskBtn');
+  if(askBtn) askBtn.disabled = aiWords.length === 0;
 }
 aiRenderTray();
 
@@ -5905,31 +5921,155 @@ document.getElementById('aiApiKeyTestBtn').addEventListener('click', async ()=>{
   }
 });
 
+/* 調べた結果1件を、カード(ショット)に変換する共通処理。
+   Geminiの結果でも、たまちんの結果ファイルでも、同じ形のカードになる */
+function aiMakeCardShot(r){
+  const lemma = (r.lemma || '').trim();
+  const meaning = (r.meaning || '').trim();
+  if(!lemma && !meaning) return null;
+  // 一問一答で表示する答えテキストを組み立てる
+  let answer = lemma;
+  if(r.pos) answer += '（' + r.pos + '）';
+  if(meaning) answer += '\n' + meaning;
+  if(r.surface && lemma && r.surface.toLowerCase() !== lemma.toLowerCase()){
+    answer += '\n（写真の形：' + r.surface + '）';
+  }
+  return {
+    dataUrl: r.dataUrl, width: r.width, height: r.height,
+    mask: { top: 0, bottom: 0, left: 0, right: 0 }, // 答えは写真の中に無いのでマスクは使わない
+    id: makeShotId(),
+    memLevel: 0,
+    hint: (r.mnemonic || '').trim(), // ヒント欄にカタカナ語呂合わせ
+    answerText: answer,              // 一問一答で開く答え(生成した日本語の意味)
+    word: lemma,
+    surface: r.surface || ''
+  };
+}
+
+/* ---------- たまちんへの変換依頼（Geminiの肩代わり） ----------
+   切り取った単語を依頼箱に貯め、1つのファイル(依頼パック)にして渡す。
+   返ってきた結果ファイルを読み込むと、依頼した写真とIDで照合してカード化する */
+const TAMACHIN_REQ_KEY = 'tamachinRequests';
+let tamachinRequests = [];
+try{ tamachinRequests = JSON.parse(localStorage.getItem(TAMACHIN_REQ_KEY) || '[]'); }catch(e){ tamachinRequests = []; }
+if(!Array.isArray(tamachinRequests)) tamachinRequests = [];
+function saveTamachinRequests(){
+  try{ localStorage.setItem(TAMACHIN_REQ_KEY, JSON.stringify(tamachinRequests)); return true; }
+  catch(e){ console.error(e); return false; }
+}
+function renderTamachinBox(){
+  const el = document.getElementById('aiAskState');
+  if(el) el.textContent = '依頼箱：' + tamachinRequests.length + '件' + (tamachinRequests.length ? '（結果待ち）' : '');
+  const ex = document.getElementById('aiPackExportBtn');
+  if(ex) ex.disabled = tamachinRequests.length === 0;
+}
+
+const aiAskBtn = document.getElementById('aiAskBtn');
+if(aiAskBtn) aiAskBtn.addEventListener('click', ()=>{
+  if(aiWords.length === 0) return;
+  const now = Date.now();
+  const added = aiWords.map((w, i)=> ({
+    id: 'req-' + now + '-' + i + '-' + Math.floor(Math.random() * 1e6),
+    dataUrl: w.dataUrl, width: w.width, height: w.height, createdAt: now
+  }));
+  tamachinRequests = tamachinRequests.concat(added);
+  if(!saveTamachinRequests()){
+    tamachinRequests.splice(tamachinRequests.length - added.length, added.length);
+    showToast('保存容量がいっぱいで、依頼箱に入れられませんでした', true);
+    return;
+  }
+  aiWords = [];
+  aiRenderTray();
+  renderTamachinBox();
+  showToast(added.length + '語を依頼箱に入れました。「依頼パックを書き出す」から、たまちんに送ってください');
+});
+
+document.getElementById('aiPackExportBtn').addEventListener('click', async ()=>{
+  if(tamachinRequests.length === 0){ showToast('依頼箱が空です', true); return; }
+  const pack = {
+    tamachinRequest: 1,
+    app: 'Word-card-',
+    createdAt: new Date().toISOString(),
+    requests: tamachinRequests.map(r=> ({ id: r.id, image: r.dataUrl, width: r.width, height: r.height }))
+  };
+  const text = JSON.stringify(pack);
+  const fname = 'たまちんへの依頼.json';
+  // 共有シートが使える端末では、そのまま送れる形にする
+  try{
+    const file = new File([text], fname, { type: 'application/json' });
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file] });
+      showToast('依頼パックを共有しました');
+      return;
+    }
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // 共有をやめただけ
+    console.error(e);
+  }
+  downloadBlob(new Blob([text], { type: 'application/json' }), fname);
+  showToast('依頼パックを書き出しました。ファイルを選んで、たまちんに送ってください');
+});
+
+const aiPackFile = document.getElementById('aiPackFile');
+document.getElementById('aiPackImportBtn').addEventListener('click', ()=> aiPackFile.click());
+aiPackFile.addEventListener('change', async ()=>{
+  const f = aiPackFile.files && aiPackFile.files[0];
+  aiPackFile.value = '';
+  if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    if(!data || data.tamachinResult !== 1 || !Array.isArray(data.cards)) throw new Error('たまちんの結果ファイルではないようです');
+    let n = 0, missing = 0;
+    const doneIds = new Set();
+    data.cards.forEach(c=>{
+      const req = tamachinRequests.find(r=> r.id === c.requestId);
+      if(!req){ missing++; return; }
+      const shot = aiMakeCardShot({
+        dataUrl: req.dataUrl, width: req.width, height: req.height,
+        surface: c.surface || '', lemma: c.lemma || c.word || '',
+        pos: c.pos || '', meaning: c.meaning || '', mnemonic: c.mnemonic || c.hint || ''
+      });
+      if(!shot){ missing++; return; }
+      shots.push(shot);
+      doneIds.add(req.id);
+      n++;
+    });
+    if(doneIds.size){
+      tamachinRequests = tamachinRequests.filter(r=> !doneIds.has(r.id));
+      saveTamachinRequests();
+      renderTamachinBox();
+    }
+    if(n > 0){
+      renderThumbs();
+      showToast(n + '枚のAIカードを追加しました');
+      setStatus('たまちんの結果を取り込みました。暗記タブで練習するか、セットとして保存してください');
+    }else{
+      showToast('取り込めるカードがありませんでした' + (missing ? '（依頼箱に無いIDが' + missing + '件）' : ''), true);
+    }
+  }catch(e){
+    console.error(e);
+    showToast('結果ファイルを読み込めませんでした：' + (e.message || ''), true);
+  }
+});
+
+document.getElementById('aiAskClearBtn').addEventListener('click', ()=>{
+  if(tamachinRequests.length === 0){ showToast('依頼箱は空です'); return; }
+  if(!confirm('依頼箱の' + tamachinRequests.length + '件を全部消しますか？（結果待ちの写真も消えます）')) return;
+  tamachinRequests = [];
+  saveTamachinRequests();
+  renderTamachinBox();
+  showToast('依頼箱を空にしました');
+});
+renderTamachinBox();
+
 /* ---------- カード(ショット)として追加 ---------- */
 aiAddBtn.addEventListener('click', ()=>{
   if(aiResults.length === 0) return;
   let n = 0;
   aiResults.forEach(r=>{
-    const lemma = (r.lemma || '').trim();
-    const meaning = (r.meaning || '').trim();
-    if(!lemma && !meaning) return;
-    // 一問一答で表示する答えテキストを組み立てる
-    let answer = lemma;
-    if(r.pos) answer += '（' + r.pos + '）';
-    if(meaning) answer += '\n' + meaning;
-    if(r.surface && lemma && r.surface.toLowerCase() !== lemma.toLowerCase()){
-      answer += '\n（写真の形：' + r.surface + '）';
-    }
-    shots.push({
-      dataUrl: r.dataUrl, width: r.width, height: r.height,
-      mask: { top: 0, bottom: 0, left: 0, right: 0 }, // 答えは写真の中に無いのでマスクは使わない
-      id: makeShotId(),
-      memLevel: 0,
-      hint: (r.mnemonic || '').trim(), // ヒント欄にカタカナ語呂合わせ
-      answerText: answer,              // 一問一答で開く答え(生成した日本語の意味)
-      word: lemma,
-      surface: r.surface || ''
-    });
+    const shot = aiMakeCardShot(r);
+    if(!shot) return;
+    shots.push(shot);
     n++;
   });
   if(n === 0){ showToast('追加できるカードがありません', true); return; }
