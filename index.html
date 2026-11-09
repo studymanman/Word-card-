@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-09 00:25（AIカードは印刷でも写真なし・左は原型で出す版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-09 23:55（文字カードをAIカードと同じ寸法にして詰めた版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -4600,38 +4600,34 @@ function makePdfTextImage(shot){
 /* 撮影中の写真(shots)以外にも、保存済みセットの写真でもPDFを作れるように
    写真の配列を受け取る形にしたもの。中身のレイアウト処理は今まで通り */
 /* 文字カード(写真を読み取ってテキスト化したカード)をPDFに印刷するための行画像。
-   全部の行でキャンバスの大きさ・英語の開始位置・日本語の開始位置を固定するので、
-   印刷したあと紙のシートで隠して少しずつずらす勉強がしやすい。
+   AIカード(makePdfTextImage)と寸法をそろえる：幅1400・仕切り線は左から540・
+   英語は700 62px・日本語は52px。高さは中身の行数に合わせて詰める
+   (以前は全行420px固定で、余白が大きく場所を取りすぎた)。
    jsPDFの標準フォントは日本語を出せないため、canvasに描いて画像にする */
 function makePdfWordRowImage(shot){
-  const pxW = 1400, pxH = 420, pad = 44;
-  const jaX = 800; // 日本語の列の開始位置(全行で固定)
-  const cv = document.createElement('canvas');
-  cv.width = pxW; cv.height = pxH;
-  const cx = cv.getContext('2d');
-  const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
-  cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
-  cx.fillRect(0, 0, pxW, pxH);
-  cx.strokeStyle = pdfBwActive ? '#9a9a9a' : 'rgba(38,36,31,0.45)';
-  cx.lineWidth = 3;
-  cx.strokeRect(2, 2, pxW - 4, pxH - 4);
-
-  function wrapLines(text, maxW, font){
-    cx.font = font;
+  const pxW = 1400;
+  const pad = 36;
+  const divX = 540; // 仕切り線の位置(AIカードと同じ)
+  const enFont = '700 62px sans-serif';
+  const jaFont = '52px sans-serif';
+  const enLH = 80, jaLH = 72;
+  const meas = document.createElement('canvas').getContext('2d');
+  function wrap(text, maxW, font){
+    meas.font = font;
     const lines = [];
-    String(text || '').split('\n').forEach(srcLine=>{
-      const tokens = srcLine.split(/(\s+)/).filter(t=>t.length);
+    String(text || '').split('\n').forEach(src=>{
+      const tokens = src.split(/(\s+)/).filter(t=>t.length);
       let cur = '';
       tokens.forEach(tok=>{
-        if(!/^\s+$/.test(tok) && cx.measureText(tok).width > maxW){
+        if(!/^\s+$/.test(tok) && meas.measureText(tok).width > maxW){
           if(cur){ lines.push(cur.replace(/\s+$/, '')); cur = ''; }
           let part = '';
           for(const ch of tok){
-            if(part && cx.measureText(part + ch).width > maxW){ lines.push(part); part = ch; }
+            if(part && meas.measureText(part + ch).width > maxW){ lines.push(part); part = ch; }
             else part += ch;
           }
           cur = part;
-        }else if(cur && cx.measureText(cur + tok).width > maxW){
+        }else if(cur && meas.measureText(cur + tok).width > maxW){
           lines.push(cur.replace(/\s+$/, ''));
           cur = /^\s+$/.test(tok) ? '' : tok;
         }else{
@@ -4642,24 +4638,29 @@ function makePdfWordRowImage(shot){
     });
     return lines;
   }
-  function drawCol(text, x, maxW, font, lineH, maxLines){
-    let lines = wrapLines(text, maxW, font);
-    if(lines.length > maxLines) lines = lines.slice(0, maxLines);
-    cx.font = font;
-    cx.fillStyle = ink;
-    cx.textBaseline = 'top';
-    let y = (pxH - lines.length * lineH) / 2;
-    lines.forEach(l=>{ cx.fillText(l, x, y); y += lineH; });
-  }
-
-  // 英語と日本語の間の仕切り線(位置は全行で固定)
+  const enLines = wrap(shot.textEn || '', divX - pad - 24, enFont).slice(0, 3);
+  const jaLines = wrap(shot.textJa || '', pxW - divX - 24 - pad, jaFont).slice(0, 3);
+  const pxH = pad * 2 + Math.max(enLines.length * enLH, jaLines.length * jaLH, jaLH);
+  const cv = document.createElement('canvas');
+  cv.width = pxW;
+  cv.height = pxH;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
+  cx.fillRect(0, 0, pxW, pxH);
+  const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
+  // 英語と訳の間の仕切り線(AIカードと同じ位置・見た目)
+  cx.strokeStyle = pdfBwActive ? '#9a9a9a' : 'rgba(38,36,31,0.35)';
+  cx.lineWidth = 3;
   cx.beginPath();
-  cx.moveTo(jaX - 30, pad - 10);
-  cx.lineTo(jaX - 30, pxH - pad + 10);
+  cx.moveTo(divX, pad - 8);
+  cx.lineTo(divX, pxH - pad + 8);
   cx.stroke();
-
-  drawCol(shot.textEn || '', pad, jaX - 30 - pad - 24, '700 72px sans-serif', 96, 3);
-  drawCol(shot.textJa || '', jaX, pxW - jaX - pad, '60px sans-serif', 84, 3);
+  cx.fillStyle = ink;
+  cx.textBaseline = 'top';
+  cx.font = enFont;
+  enLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * enLH));
+  cx.font = jaFont;
+  jaLines.forEach((l, i)=> cx.fillText(l, divX + 24, pad + i * jaLH));
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
 }
 
@@ -4780,7 +4781,8 @@ function buildPdfSections(sections, filename, opts){
         if(opts && opts.blankSet && opts.blankSet.has(s)){
           let aspect;
           if(opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
-            aspect = makePdfWordRowImage({ textEn:'', textJa:'' }).aspect;
+            const t = opts.textMap.get(s);
+            aspect = makePdfWordRowImage({ textEn: t.en, textJa: t.ja }).aspect;
           }else{
             aspect = s.answerText ? makePdfTextImage(s).aspect : (s.height / s.width);
           }
