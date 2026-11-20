@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-10 01:15（たまちんに変換を頼める依頼箱を追加した版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-20 18:30（定型表現セットを追加した版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -2685,16 +2685,16 @@ deckBulkPdfBtn.addEventListener('click', async ()=>{
     const title = input.trim() || ('選んだセット（' + targets.length + '個）');
     const all = [];
     targets.forEach(d => (d.shots || []).forEach(s => all.push(s)));
-    startPdfExport([{ title: title, shots: shuffledCopy(all) }], title.replace(/[\\/:*?"<>|]/g, '_') + '.pdf', targets.filter(d=> d.accum));
+    startPdfExport([{ title: title, shots: shuffledCopy(all) }], title.replace(/[\\/:*?"<>|]/g, '_') + '.pdf', targets.filter(d=> d.accum || d.exprDeck));
     return;
   }
   if(order === 'each'){
     const sections = targets.map(d => ({ title: d.name, shots: shuffledCopy(d.shots) }));
-    startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum));
+    startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum || d.exprDeck));
     return;
   }
   const sections = targets.map(d => ({ title: d.name, shots: d.shots }));
-  startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum));
+  startPdfExport(sections, '選んだセット（' + targets.length + '個）.pdf', targets.filter(d=> d.accum || d.exprDeck));
 });
 
 /* 選んだセットの画像を、セットごとのフォルダに分けて1つのZIPにする */
@@ -2746,8 +2746,9 @@ async function renderDeckList(){
     decks = list.filter(d => (d.folder || '') === currentBrowseFolder);
     deckListTitle.textContent = currentBrowseFolder ? currentBrowseFolder : '（フォルダなし）';
   }
-  // 蓄積ルームは常に先頭に表示する
-  decks = decks.slice().sort((a, b)=> (b.accum ? 1 : 0) - (a.accum ? 1 : 0));
+  // 蓄積ルームと定型表現は常に先頭に表示する
+  const pinRank = (d)=> d.accum ? 2 : (d.exprDeck ? 1 : 0);
+  decks = decks.slice().sort((a, b)=> pinRank(b) - pinRank(a));
   deckListItems.innerHTML = '';
 
   if(decks.length === 0){
@@ -2776,8 +2777,8 @@ async function renderDeckList(){
 
     const main = document.createElement('div');
     main.className = 'browse-main';
-    main.innerHTML = '<div class="browse-title">' + d.name + (d.accum ? ' <span class="accum-badge">蓄積</span>' : '') + '</div>' +
-      '<div class="browse-sub">' + d.shots.length + '枚' + (d.accum ? '（印刷済み ' + d.shots.filter(s=> s.printed).length + '枚）' : '') + '</div>';
+    main.innerHTML = '<div class="browse-title">' + d.name + (d.accum ? ' <span class="accum-badge">蓄積</span>' : '') + (d.exprDeck ? ' <span class="accum-badge">表現</span>' : '') + '</div>' +
+      '<div class="browse-sub">' + d.shots.length + '枚' + ((d.accum || d.exprDeck) ? '（印刷済み ' + d.shots.filter(s=> s.printed).length + '枚）' : '') + '</div>';
     main.addEventListener('click', ()=>{
       if(deckSelectMode){
         check.checked = !check.checked;
@@ -2927,7 +2928,7 @@ async function renderDeckList(){
           { label:'データ（JSON）で書き出す', value:'json' }
         ]);
         if(kind === 'pdf'){
-          startPdfExport([{ title: null, shots: d.shots }], d.name + '.pdf', d.accum ? [d] : null);
+          startPdfExport([{ title: null, shots: d.shots }], d.name + '.pdf', (d.accum || d.exprDeck) ? [d] : null);
         }else if(kind === 'zip'){
           setStatus('画像をまとめています…');
           try{
@@ -2958,8 +2959,8 @@ async function renderDeckList(){
           { label:'複製', value:'dup' },
           { label:'削除', value:'del' }
         ];
-        if(!d.accum) menuItems.splice(3, 0, { label:'蓄積ルームへ入れる', value:'toaccum' });
-        if(d.accum) menuItems.push({ label:'印刷済みをリセット', value:'printreset' });
+        if(!d.accum && !d.exprDeck) menuItems.splice(3, 0, { label:'蓄積ルームへ入れる', value:'toaccum' });
+        if(d.accum || d.exprDeck) menuItems.push({ label:'印刷済みをリセット', value:'printreset' });
         const act = await pickFromList('「' + d.name + '」の操作を選んでください', menuItems);
         if(act && deckMoreActions[act]) deckMoreActions[act]();
       });
@@ -3142,8 +3143,288 @@ saveAccumBtn.addEventListener('click', async ()=>{
   }
 });
 
+
+/* ---------- 定型表現データ ----------
+   長文の黄色マーカーから作った定型表現の蓄積(長文ルーム側の
+   expressions.json と同じ内容)。ここに埋め込んでおき、起動時に
+   「定型表現」セットへ自動で同期する。新しい回が増えたら、
+   このデータごとアプリを更新する */
+const EXPRESSIONS_DATA = {
+ "version": "b1-2026-11-20",
+ "items": [
+  {
+   "expr": "the story behind ～",
+   "meaning": "～の背後にある話・いきさつ",
+   "form": "story が核の名詞句。behind ～ は story にかかる前置詞句（形容詞句）",
+   "related": "",
+   "example": "the story behind Wellcome's museum is even stranger",
+   "exampleJa": "ウェルコムの博物館の背後にある物語はさらに奇妙だ",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "add more",
+   "meaning": "さらに加える・付け足す",
+   "form": "add は他動詞で、more が目的語（名詞）。「もっと多く」ではなく「さらに（物を）加える」",
+   "related": "",
+   "example": "Later, while he was traveling in South America as a salesman for a New York drug company, he added more.",
+   "exampleJa": "その後、南アメリカを旅行している間に、彼はさらに（コレクションに）加えた",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "of amazing scope",
+   "meaning": "驚くべき規模の",
+   "form": "of＋名詞で、前の名詞にかかる形容詞句。scope は「規模・範囲」",
+   "related": "",
+   "example": "These items eventually formed a collection of amazing scope.",
+   "exampleJa": "これらの品々はやがて、驚くべき規模のコレクションを形づくった",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "all over ～",
+   "meaning": "～の至る所に・～中に",
+   "form": "前置詞句（副詞句）。場所を表す名詞と組で使う",
+   "related": "",
+   "example": "all packed into storage buildings all over London",
+   "exampleJa": "すべてロンドン中の倉庫の建物に詰め込まれて",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "be meant to do",
+   "meaning": "～するための（ものとして作られた）",
+   "form": "過去分詞句として名詞を修飾する形でよく使う。mean は「意図する」",
+   "related": "drive away ＝ 追い払う／evil spirits ＝ 悪霊",
+   "example": "primitive noise-makers meant to drive away evil spirits",
+   "exampleJa": "悪霊を追い払うための原始的な音を出す道具",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "make profits",
+   "meaning": "利益を上げる・出す",
+   "form": "make＋名詞の動詞句。considerable profits ＝ かなりの利益",
+   "related": "efficient ＝ 効率のよい",
+   "example": "Since Burroughs, Wellcome & Co. was an efficient business, it made considerable profits.",
+   "exampleJa": "バローズ・ウェルコム商会は効率的な事業だったので、かなりの利益を上げた",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "one's share of ～",
+   "meaning": "～のうちの（自分）の取り分",
+   "form": "share は「分け前・持ち分」。本文の these は直前の profits（利益）を指す",
+   "related": "",
+   "example": "Wellcome was able to use his share of these to continue adding to the collection he had started as a boy.",
+   "exampleJa": "ウェルコムは、そのうちの自分の取り分を使って、少年時代に始めたコレクションに加え続けることができた",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "at a young age",
+   "meaning": "若くして・若い年齢で",
+   "form": "前置詞句（副詞句）。rather は「かなり」の副詞で、形容詞 young を修飾する",
+   "related": "at an early age ＝ 若くして／at a tender age ＝ 幼くして／at an advanced age ＝ 高齢で／at a ripe old age ＝ かなりの高齢で／at the age of ＋数字 ＝ ～歳のときに",
+   "example": "because he died at a rather young age",
+   "exampleJa": "彼がかなり若くして亡くなったので",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "apply oneself to ～",
+   "meaning": "～に打ち込む・専念する",
+   "form": "再帰代名詞（oneself）を伴う動詞句。by ～ing の形で手段を表すことが多い",
+   "related": "life's work ＝ 生涯の仕事／drown one's sorrow ＝ 悲しみを紛らわす",
+   "example": "I shall try to drown my sorrow by applying myself to my life's work",
+   "exampleJa": "自分の生涯の仕事に打ち込むことで、悲しみを紛らわそうと思う",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "tons of ～",
+   "meaning": "大量の～",
+   "form": "数量を表す名詞句。a lot of を強めた言い方で、重さそのものではない",
+   "related": "",
+   "example": "he had tons of stones, bones, coins and pottery fragments shipped back to London",
+   "exampleJa": "彼は何トンもの石、骨、コイン、陶器の破片をロンドンへ送り返させた",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  },
+  {
+   "expr": "in charge of ～",
+   "meaning": "～の担当で・～の責任者で",
+   "form": "前置詞句。the person in charge of ～ の形で名詞を修飾することが多い",
+   "related": "",
+   "example": "the person in charge of the collection",
+   "exampleJa": "コレクションの責任者",
+   "batch": 1,
+   "source": "Wellcome（関大2012 法 大問II）"
+  }
+ ]
+};
+
+const EXPR_DECK_NAME = '定型表現';
+function exprShotId(key){
+  let h = 0;
+  for(let i = 0; i < key.length; i++){ h = ((h * 31) + key.charCodeAt(i)) >>> 0; }
+  return 'expr-' + h.toString(36);
+}
+function exprAnswerText(item){
+  const lines = [item.meaning || ''];
+  if(item.form) lines.push('形：' + item.form);
+  if(item.related) lines.push('関連：' + item.related);
+  if(item.example) lines.push('例：' + item.example);
+  if(item.exampleJa) lines.push(item.exampleJa);
+  return lines.join('\n');
+}
+/* 定型表現カードの表の画像(写真が無いので、表現を描いた画像を作る。
+   一問一答の表は原型の文字カード表示が優先されるため、これは主に
+   サムネイルや画像書き出し用) */
+function makeExprFrontImage(expr){
+  const pxW = 1400, pad = 44;
+  const font = '700 84px sans-serif';
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = font;
+  const words = String(expr || '').split(/\s+/).filter(t=> t.length);
+  const lines = [];
+  let cur = '';
+  words.forEach(w=>{
+    if(cur && meas.measureText(cur + ' ' + w).width > pxW - pad * 2){ lines.push(cur); cur = w; }
+    else cur = cur ? cur + ' ' + w : w;
+  });
+  if(cur) lines.push(cur);
+  const useLines = (lines.length ? lines : ['']).slice(0, 3);
+  const pxH = pad * 2 + useLines.length * 110;
+  const cv = document.createElement('canvas');
+  cv.width = pxW; cv.height = pxH;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#fffdf8';
+  cx.fillRect(0, 0, pxW, pxH);
+  cx.fillStyle = '#26241f';
+  cx.font = font;
+  cx.textBaseline = 'top';
+  useLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * 110));
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), width: pxW, height: pxH };
+}
+/* 埋め込みデータと「定型表現」セットを同期する。
+   暗記度(memLevel)と印刷済み(printed)は、表現ごとに引き継ぐ */
+async function syncExprDeck(){
+  try{
+    if(!EXPRESSIONS_DATA || !EXPRESSIONS_DATA.items || EXPRESSIONS_DATA.items.length === 0) return;
+    const decks = await loadDecks();
+    let deck = decks.find(d=> d.exprDeck) || decks.find(d=> d.name === EXPR_DECK_NAME);
+    if(deck && deck.exprVersion === EXPRESSIONS_DATA.version && (deck.shots || []).length === EXPRESSIONS_DATA.items.length) return;
+    const prevByKey = {};
+    if(deck) (deck.shots || []).forEach(s=>{ if(s.exprKey) prevByKey[s.exprKey] = s; });
+    const shots = EXPRESSIONS_DATA.items.map(item=>{
+      const prev = prevByKey[item.expr];
+      const front = makeExprFrontImage(item.expr);
+      return {
+        dataUrl: front.dataUrl, width: front.width, height: front.height,
+        mask: { top: 0, bottom: 0, left: 0, right: 0 },
+        id: prev ? prev.id : exprShotId(item.expr),
+        memLevel: prev && typeof prev.memLevel === 'number' ? prev.memLevel : 0,
+        hint: '',
+        answerText: exprAnswerText(item),
+        word: item.expr, surface: '',
+        exprCard: true, exprKey: item.expr,
+        exprMeaning: item.meaning || '', exprForm: item.form || '',
+        exprRelated: item.related || '', exprExample: item.example || '',
+        exprExampleJa: item.exampleJa || '', exprSource: item.source || '',
+        exprBatch: item.batch || 0,
+        printed: prev ? !!prev.printed : false
+      };
+    });
+    if(!deck){
+      deck = { name: EXPR_DECK_NAME, folder: '', exprDeck: true, mask: { top: 0, bottom: 0, left: 0, right: 0 }, shots: [] };
+    }
+    deck.exprDeck = true;
+    deck.name = EXPR_DECK_NAME;
+    deck.folder = ''; // 置き場は常にフォルダなし(蓄積ルームと同じ並び)
+    deck.exprVersion = EXPRESSIONS_DATA.version;
+    deck.shots = shots;
+    await saveDeckToStorage(deck);
+  }catch(e){ console.error(e); }
+}
+
+/* 定型表現カード専用のPDF画像。AIカードと寸法をそろえ(幅1400・仕切り540)、
+   右側には意味・形・関連・例文と訳・出典を全部入れる */
+function makePdfExprImage(shot){
+  const pxW = 1400;
+  const pad = 36;
+  const divX = 540;
+  const enFont = '700 62px sans-serif';
+  const meas = document.createElement('canvas').getContext('2d');
+  function wrap(text, maxW, font){
+    meas.font = font;
+    const lines = [];
+    String(text || '').split('\n').forEach(srcLine=>{
+      const tokens = srcLine.split(/(\s+)/).filter(t=>t.length);
+      let cur = '';
+      tokens.forEach(tok=>{
+        if(!/^\s+$/.test(tok) && meas.measureText(tok).width > maxW){
+          if(cur){ lines.push(cur.replace(/\s+$/, '')); cur = ''; }
+          let part = '';
+          for(const ch of tok){
+            if(part && meas.measureText(part + ch).width > maxW){ lines.push(part); part = ch; }
+            else part += ch;
+          }
+          cur = part;
+        }else if(cur && meas.measureText(cur + tok).width > maxW){
+          lines.push(cur.replace(/\s+$/, ''));
+          cur = /^\s+$/.test(tok) ? '' : tok;
+        }else{
+          cur += tok;
+        }
+      });
+      lines.push(cur.replace(/\s+$/, ''));
+    });
+    return lines;
+  }
+  const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
+  const sub = pdfBwActive ? '#4a4a4a' : 'rgba(38,36,31,0.78)';
+  const secs = [];
+  if(shot.exprMeaning) secs.push({ text: shot.exprMeaning, font: '52px sans-serif', lh: 72, max: 3, color: ink });
+  if(shot.exprForm) secs.push({ text: '形：' + shot.exprForm, font: '40px sans-serif', lh: 54, max: 3, color: sub });
+  if(shot.exprRelated) secs.push({ text: '関連：' + shot.exprRelated, font: '40px sans-serif', lh: 54, max: 3, color: sub });
+  if(shot.exprExample) secs.push({ text: '例：' + shot.exprExample, font: '40px sans-serif', lh: 54, max: 3, color: ink });
+  if(shot.exprExampleJa) secs.push({ text: shot.exprExampleJa, font: '40px sans-serif', lh: 54, max: 2, color: sub });
+  if(shot.exprSource) secs.push({ text: shot.exprSource, font: '32px sans-serif', lh: 44, max: 1, color: sub });
+  secs.forEach(s=>{ s.lines = wrap(s.text, pxW - divX - 24 - pad, s.font).slice(0, s.max); });
+  const enLines = wrap(shot.word || '', divX - pad - 24, enFont).slice(0, 3);
+  const rightH = secs.reduce((n, s)=> n + s.lines.length * s.lh, 0) + Math.max(0, secs.length - 1) * 8;
+  const pxH = pad * 2 + Math.max(enLines.length * 80, rightH, 72);
+  const cv = document.createElement('canvas');
+  cv.width = pxW;
+  cv.height = pxH;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = pdfBwActive ? '#ffffff' : '#fffdf8';
+  cx.fillRect(0, 0, pxW, pxH);
+  cx.strokeStyle = pdfBwActive ? '#9a9a9a' : 'rgba(38,36,31,0.35)';
+  cx.lineWidth = 3;
+  cx.beginPath();
+  cx.moveTo(divX, pad - 8);
+  cx.lineTo(divX, pxH - pad + 8);
+  cx.stroke();
+  cx.fillStyle = ink;
+  cx.textBaseline = 'top';
+  cx.font = enFont;
+  enLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * 80));
+  let y = pad;
+  secs.forEach(s=>{
+    cx.font = s.font;
+    cx.fillStyle = s.color;
+    s.lines.forEach(l=>{ cx.fillText(l, divX + 24, y); y += s.lh; });
+    y += 8;
+  });
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.92), aspect: pxH / pxW };
+}
+
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
+  await syncExprDeck(); // 定型表現セットを最新データに同期
   await refreshFolderSelect();
   await renderFolderList();
   kickBgTextConvert(); // 文字版の無いセットがあれば裏で作る
@@ -4798,7 +5079,7 @@ function buildPdfSections(sections, filename, opts){
             const t = opts.textMap.get(s);
             aspect = makePdfWordRowImage({ textEn: t.en, textJa: t.ja }).aspect;
           }else{
-            aspect = s.answerText ? makePdfTextImage(s).aspect : (s.height / s.width);
+            aspect = s.exprCard ? makePdfExprImage(s).aspect : (s.answerText ? makePdfTextImage(s).aspect : (s.height / s.width));
           }
           return { kind:'blank', aspect: aspect };
         }
@@ -4806,6 +5087,10 @@ function buildPdfSections(sections, filename, opts){
         if(opts && opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
           const t = opts.textMap.get(s);
           return { kind:'text', img: makePdfWordRowImage({ textEn: t.en, textJa: t.ja }) };
+        }
+        // 定型表現カードは専用レイアウト(意味・形・関連・例文を全部入れる)
+        if(s.exprCard){
+          return { kind:'text', img: makePdfExprImage(s) };
         }
         // AIカードは、調べたときの写真は印刷せず、文字カードだけで出す
         if(s.answerText){
