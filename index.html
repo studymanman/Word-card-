@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-20 18:50（定型表現はファイル読み込み方式にした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-20 19:00（定型表現は蓄積ルームへ入り、答えは品詞と意味だけにした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1424,7 +1424,7 @@
 
 <div class="panel">
   <div class="section-label">定型表現（長文ルームから）</div>
-  <div class="sub" style="margin-bottom:8px;">長文の部屋で黄色マーカーの表現をまとめたカードファイルを受け取ったら、ここから読み込んでください。「定型表現」セットにカードとして追加されます。同じ表現が入っていたら内容だけ新しいものに差し替わります（暗記度と印刷済みの記録は残ります）。</div>
+  <div class="sub" style="margin-bottom:8px;">長文の部屋で黄色マーカーの表現をまとめたカードファイルを受け取ったら、ここから読み込んでください。蓄積ルームにカードとして追加されます。同じ表現が入っていたら答えの内容だけ新しいものに差し替わります（暗記度と印刷済みの記録は残ります）。カードの答え側は品詞と意味だけです。</div>
   <div class="row">
     <button id="exprImportBtn" class="btn-secondary" style="flex:1">定型表現ファイルを読み込む</button>
     <input type="file" id="exprImportInput" accept="application/json,.json" style="display:none;">
@@ -3165,12 +3165,10 @@ function exprShotId(key){
   return 'expr-' + h.toString(36);
 }
 function exprAnswerText(item){
-  const lines = [item.meaning || ''];
-  if(item.form) lines.push('形：' + item.form);
-  if(item.related) lines.push('関連：' + item.related);
-  if(item.example) lines.push('例：' + item.example);
-  if(item.exampleJa) lines.push(item.exampleJa);
-  return lines.join('\n');
+  // 答え側は品詞(句の種類)と意味だけ。本文の例文などは入れない
+  const pos = String(item.pos || '').trim();
+  const meaning = String(item.meaning || '');
+  return pos ? pos + '\n' + meaning : meaning;
 }
 /* 定型表現カードの表の画像(写真が無いので、表現を描いた画像を作る。
    一問一答の表は原型の文字カード表示が優先されるため、これは主に
@@ -3201,8 +3199,8 @@ function makeExprFrontImage(expr){
   useLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * 110));
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), width: pxW, height: pxH };
 }
-/* 定型表現のカードファイルを読み込んで「定型表現」セットへ反映する。
-   既にある表現は内容だけ差し替え(暗記度と印刷済みは残す)、
+/* 定型表現のカードファイルを読み込んで、蓄積ルームへ入れる。
+   既にある表現は答えの内容だけ差し替え(暗記度と印刷済みは残す)、
    無い表現は新しいカードとして足す */
 async function importExpressionsData(data){
   const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : null);
@@ -3210,15 +3208,13 @@ async function importExpressionsData(data){
   const valid = items.filter(it=> it && String(it.expr || '').trim());
   if(valid.length === 0) throw new Error('表現が1件も入っていません');
   const decks = await loadDecks();
-  let deck = decks.find(d=> d.exprDeck) || decks.find(d=> d.name === EXPR_DECK_NAME);
-  if(!deck){
-    deck = { name: EXPR_DECK_NAME, folder: '', exprDeck: true, mask: { top: 0, bottom: 0, left: 0, right: 0 }, shots: [] };
+  let accum = decks.find(d=> d.accum) || decks.find(d=> d.name === ACCUM_DECK_NAME);
+  if(!accum){
+    accum = { name: ACCUM_DECK_NAME, folder: '', accum: true, mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }, shots: [] };
   }
-  deck.exprDeck = true;
-  deck.name = EXPR_DECK_NAME;
-  deck.folder = '';
+  accum.accum = true;
   const byKey = {};
-  (deck.shots || []).forEach(s=>{ if(s.exprKey) byKey[s.exprKey] = s; });
+  (accum.shots || []).forEach(s=>{ if(s.exprKey) byKey[s.exprKey] = s; });
   let added = 0, updated = 0;
   valid.forEach(item=>{
     const key = String(item.expr).trim();
@@ -3226,13 +3222,10 @@ async function importExpressionsData(data){
     if(ex){
       ex.word = item.expr;
       ex.answerText = exprAnswerText(item);
+      ex.exprPos = item.pos || '';
       ex.exprMeaning = item.meaning || '';
-      ex.exprForm = item.form || '';
-      ex.exprRelated = item.related || '';
-      ex.exprExample = item.example || '';
-      ex.exprExampleJa = item.exampleJa || '';
-      ex.exprSource = item.source || '';
-      ex.exprBatch = item.batch || 0;
+      delete ex.exprForm; delete ex.exprRelated; delete ex.exprExample;
+      delete ex.exprExampleJa; delete ex.exprSource; delete ex.exprBatch;
       updated++;
     }else{
       const front = makeExprFrontImage(item.expr);
@@ -3245,21 +3238,58 @@ async function importExpressionsData(data){
         answerText: exprAnswerText(item),
         word: item.expr, surface: '',
         exprCard: true, exprKey: key,
-        exprMeaning: item.meaning || '', exprForm: item.form || '',
-        exprRelated: item.related || '', exprExample: item.example || '',
-        exprExampleJa: item.exampleJa || '', exprSource: item.source || '',
-        exprBatch: item.batch || 0,
+        exprPos: item.pos || '', exprMeaning: item.meaning || '',
         printed: false
       };
-      deck.shots.push(shot);
+      accum.shots.push(shot);
       byKey[key] = shot;
       added++;
     }
   });
-  await saveDeckToStorage(deck);
+  await saveDeckToStorage(accum);
   await refreshBrowseView();
-  return { added: added, updated: updated, total: deck.shots.length };
+  return { added: added, updated: updated, total: accum.shots.length };
 }
+
+/* 以前の版で作られた「定型表現」セットが残っていたら、
+   中の表現カードを蓄積ルームへ移して、セットは片付ける */
+async function migrateExprDeckToAccum(){
+  try{
+    const decks = await loadDecks();
+    const legacy = decks.find(d=> d.exprDeck) || decks.find(d=> d.name === EXPR_DECK_NAME && !d.accum);
+    if(!legacy) return;
+    const exprShots = (legacy.shots || []).filter(s=> s.exprCard);
+    if(exprShots.length){
+      let accum = decks.find(d=> d.accum) || decks.find(d=> d.name === ACCUM_DECK_NAME);
+      if(!accum){
+        accum = { name: ACCUM_DECK_NAME, folder: '', accum: true, mask: { top:maskTop, bottom:maskBottom, left:maskLeft, right:maskRight }, shots: [] };
+      }
+      accum.accum = true;
+      const byKey = {};
+      (accum.shots || []).forEach(s=>{ if(s.exprKey) byKey[s.exprKey] = s; });
+      exprShots.forEach(s=>{
+        // 答え側は品詞と意味だけの形にそろえる
+        s.answerText = exprAnswerText({ pos: s.exprPos || '', meaning: s.exprMeaning || '' });
+        delete s.exprForm; delete s.exprRelated; delete s.exprExample;
+        delete s.exprExampleJa; delete s.exprSource; delete s.exprBatch;
+        const ex = byKey[s.exprKey];
+        if(ex){
+          ex.printed = ex.printed || !!s.printed;
+          if(typeof s.memLevel === 'number' && s.memLevel > (ex.memLevel || 0)) ex.memLevel = s.memLevel;
+        }else{
+          accum.shots.push(s);
+          byKey[s.exprKey] = s;
+        }
+      });
+      await saveDeckToStorage(accum);
+    }
+    // 表現カードしか入っていないセットなら片付ける(自作の同名セットは残す)
+    if(legacy.exprDeck || exprShots.length === (legacy.shots || []).length){
+      await deleteDeckFromStorage(legacy.name);
+    }
+  }catch(e){ console.error(e); }
+}
+
 const exprImportBtn = document.getElementById('exprImportBtn');
 const exprImportInput = document.getElementById('exprImportInput');
 if(exprImportBtn && exprImportInput){
@@ -3271,8 +3301,8 @@ if(exprImportBtn && exprImportInput){
     try{
       const data = JSON.parse(await f.text());
       const r = await importExpressionsData(data);
-      showToast('定型表現を読み込みました（新規' + r.added + '件・更新' + r.updated + '件、セットは全部で' + r.total + '件）');
-      setStatus('定型表現セットを更新しました');
+      showToast('定型表現を蓄積ルームに入れました（新規' + r.added + '件・更新' + r.updated + '件、蓄積ルームは全部で' + r.total + '枚）');
+      setStatus('蓄積ルームに定型表現を追加しました');
     }catch(e){
       console.error(e);
       showToast('定型表現ファイルを読み込めませんでした：' + (e.message || ''), true);
@@ -3281,7 +3311,7 @@ if(exprImportBtn && exprImportInput){
 }
 
 /* 定型表現カード専用のPDF画像。AIカードと寸法をそろえ(幅1400・仕切り540)、
-   右側には意味・形・関連・例文と訳・出典を全部入れる */
+   右側は品詞と意味だけ入れる */
 function makePdfExprImage(shot){
   const pxW = 1400;
   const pad = 36;
@@ -3317,12 +3347,8 @@ function makePdfExprImage(shot){
   const ink = pdfBwActive ? '#2e2e2e' : '#26241f';
   const sub = pdfBwActive ? '#4a4a4a' : 'rgba(38,36,31,0.78)';
   const secs = [];
+  if(shot.exprPos) secs.push({ text: shot.exprPos, font: '40px sans-serif', lh: 54, max: 1, color: sub });
   if(shot.exprMeaning) secs.push({ text: shot.exprMeaning, font: '52px sans-serif', lh: 72, max: 3, color: ink });
-  if(shot.exprForm) secs.push({ text: '形：' + shot.exprForm, font: '40px sans-serif', lh: 54, max: 3, color: sub });
-  if(shot.exprRelated) secs.push({ text: '関連：' + shot.exprRelated, font: '40px sans-serif', lh: 54, max: 3, color: sub });
-  if(shot.exprExample) secs.push({ text: '例：' + shot.exprExample, font: '40px sans-serif', lh: 54, max: 3, color: ink });
-  if(shot.exprExampleJa) secs.push({ text: shot.exprExampleJa, font: '40px sans-serif', lh: 54, max: 2, color: sub });
-  if(shot.exprSource) secs.push({ text: shot.exprSource, font: '32px sans-serif', lh: 44, max: 1, color: sub });
   secs.forEach(s=>{ s.lines = wrap(s.text, pxW - divX - 24 - pad, s.font).slice(0, s.max); });
   const enLines = wrap(shot.word || '', divX - pad - 24, enFont).slice(0, 3);
   const rightH = secs.reduce((n, s)=> n + s.lines.length * s.lh, 0) + Math.max(0, secs.length - 1) * 8;
@@ -3355,6 +3381,7 @@ function makePdfExprImage(shot){
 
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
+  await migrateExprDeckToAccum(); // 旧「定型表現」セットがあれば蓄積ルームへ移す
   await refreshFolderSelect();
   await renderFolderList();
   kickBgTextConvert(); // 文字版の無いセットがあれば裏で作る
