@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-20 18:30（定型表現セットを追加した版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-20 18:50（定型表現はファイル読み込み方式にした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1419,6 +1419,15 @@
   <div class="row">
     <button id="importDataBtn" class="btn-secondary" style="flex:1">ファイルからデータを読み込む</button>
     <input type="file" id="importDataInput" accept="application/json" style="display:none;">
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-label">定型表現（長文ルームから）</div>
+  <div class="sub" style="margin-bottom:8px;">長文の部屋で黄色マーカーの表現をまとめたカードファイルを受け取ったら、ここから読み込んでください。「定型表現」セットにカードとして追加されます。同じ表現が入っていたら内容だけ新しいものに差し替わります（暗記度と印刷済みの記録は残ります）。</div>
+  <div class="row">
+    <button id="exprImportBtn" class="btn-secondary" style="flex:1">定型表現ファイルを読み込む</button>
+    <input type="file" id="exprImportInput" accept="application/json,.json" style="display:none;">
   </div>
 </div>
 
@@ -3144,126 +3153,10 @@ saveAccumBtn.addEventListener('click', async ()=>{
 });
 
 
-/* ---------- 定型表現データ ----------
-   長文の黄色マーカーから作った定型表現の蓄積(長文ルーム側の
-   expressions.json と同じ内容)。ここに埋め込んでおき、起動時に
-   「定型表現」セットへ自動で同期する。新しい回が増えたら、
-   このデータごとアプリを更新する */
-const EXPRESSIONS_DATA = {
- "version": "b1-2026-11-20",
- "items": [
-  {
-   "expr": "the story behind ～",
-   "meaning": "～の背後にある話・いきさつ",
-   "form": "story が核の名詞句。behind ～ は story にかかる前置詞句（形容詞句）",
-   "related": "",
-   "example": "the story behind Wellcome's museum is even stranger",
-   "exampleJa": "ウェルコムの博物館の背後にある物語はさらに奇妙だ",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "add more",
-   "meaning": "さらに加える・付け足す",
-   "form": "add は他動詞で、more が目的語（名詞）。「もっと多く」ではなく「さらに（物を）加える」",
-   "related": "",
-   "example": "Later, while he was traveling in South America as a salesman for a New York drug company, he added more.",
-   "exampleJa": "その後、南アメリカを旅行している間に、彼はさらに（コレクションに）加えた",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "of amazing scope",
-   "meaning": "驚くべき規模の",
-   "form": "of＋名詞で、前の名詞にかかる形容詞句。scope は「規模・範囲」",
-   "related": "",
-   "example": "These items eventually formed a collection of amazing scope.",
-   "exampleJa": "これらの品々はやがて、驚くべき規模のコレクションを形づくった",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "all over ～",
-   "meaning": "～の至る所に・～中に",
-   "form": "前置詞句（副詞句）。場所を表す名詞と組で使う",
-   "related": "",
-   "example": "all packed into storage buildings all over London",
-   "exampleJa": "すべてロンドン中の倉庫の建物に詰め込まれて",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "be meant to do",
-   "meaning": "～するための（ものとして作られた）",
-   "form": "過去分詞句として名詞を修飾する形でよく使う。mean は「意図する」",
-   "related": "drive away ＝ 追い払う／evil spirits ＝ 悪霊",
-   "example": "primitive noise-makers meant to drive away evil spirits",
-   "exampleJa": "悪霊を追い払うための原始的な音を出す道具",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "make profits",
-   "meaning": "利益を上げる・出す",
-   "form": "make＋名詞の動詞句。considerable profits ＝ かなりの利益",
-   "related": "efficient ＝ 効率のよい",
-   "example": "Since Burroughs, Wellcome & Co. was an efficient business, it made considerable profits.",
-   "exampleJa": "バローズ・ウェルコム商会は効率的な事業だったので、かなりの利益を上げた",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "one's share of ～",
-   "meaning": "～のうちの（自分）の取り分",
-   "form": "share は「分け前・持ち分」。本文の these は直前の profits（利益）を指す",
-   "related": "",
-   "example": "Wellcome was able to use his share of these to continue adding to the collection he had started as a boy.",
-   "exampleJa": "ウェルコムは、そのうちの自分の取り分を使って、少年時代に始めたコレクションに加え続けることができた",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "at a young age",
-   "meaning": "若くして・若い年齢で",
-   "form": "前置詞句（副詞句）。rather は「かなり」の副詞で、形容詞 young を修飾する",
-   "related": "at an early age ＝ 若くして／at a tender age ＝ 幼くして／at an advanced age ＝ 高齢で／at a ripe old age ＝ かなりの高齢で／at the age of ＋数字 ＝ ～歳のときに",
-   "example": "because he died at a rather young age",
-   "exampleJa": "彼がかなり若くして亡くなったので",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "apply oneself to ～",
-   "meaning": "～に打ち込む・専念する",
-   "form": "再帰代名詞（oneself）を伴う動詞句。by ～ing の形で手段を表すことが多い",
-   "related": "life's work ＝ 生涯の仕事／drown one's sorrow ＝ 悲しみを紛らわす",
-   "example": "I shall try to drown my sorrow by applying myself to my life's work",
-   "exampleJa": "自分の生涯の仕事に打ち込むことで、悲しみを紛らわそうと思う",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "tons of ～",
-   "meaning": "大量の～",
-   "form": "数量を表す名詞句。a lot of を強めた言い方で、重さそのものではない",
-   "related": "",
-   "example": "he had tons of stones, bones, coins and pottery fragments shipped back to London",
-   "exampleJa": "彼は何トンもの石、骨、コイン、陶器の破片をロンドンへ送り返させた",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  },
-  {
-   "expr": "in charge of ～",
-   "meaning": "～の担当で・～の責任者で",
-   "form": "前置詞句。the person in charge of ～ の形で名詞を修飾することが多い",
-   "related": "",
-   "example": "the person in charge of the collection",
-   "exampleJa": "コレクションの責任者",
-   "batch": 1,
-   "source": "Wellcome（関大2012 法 大問II）"
-  }
- ]
-};
+/* ---------- 定型表現 ----------
+   長文の黄色マーカーから作った定型表現を、カードファイル(JSON)で
+   受け取って「定型表現」セットにするための部品。
+   ファイルの形式は長文ルーム側の expressions.json と同じ項目の並び */
 
 const EXPR_DECK_NAME = '定型表現';
 function exprShotId(key){
@@ -3308,45 +3201,83 @@ function makeExprFrontImage(expr){
   useLines.forEach((l, i)=> cx.fillText(l, pad, pad + i * 110));
   return { dataUrl: cv.toDataURL('image/jpeg', 0.92), width: pxW, height: pxH };
 }
-/* 埋め込みデータと「定型表現」セットを同期する。
-   暗記度(memLevel)と印刷済み(printed)は、表現ごとに引き継ぐ */
-async function syncExprDeck(){
-  try{
-    if(!EXPRESSIONS_DATA || !EXPRESSIONS_DATA.items || EXPRESSIONS_DATA.items.length === 0) return;
-    const decks = await loadDecks();
-    let deck = decks.find(d=> d.exprDeck) || decks.find(d=> d.name === EXPR_DECK_NAME);
-    if(deck && deck.exprVersion === EXPRESSIONS_DATA.version && (deck.shots || []).length === EXPRESSIONS_DATA.items.length) return;
-    const prevByKey = {};
-    if(deck) (deck.shots || []).forEach(s=>{ if(s.exprKey) prevByKey[s.exprKey] = s; });
-    const shots = EXPRESSIONS_DATA.items.map(item=>{
-      const prev = prevByKey[item.expr];
+/* 定型表現のカードファイルを読み込んで「定型表現」セットへ反映する。
+   既にある表現は内容だけ差し替え(暗記度と印刷済みは残す)、
+   無い表現は新しいカードとして足す */
+async function importExpressionsData(data){
+  const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : null);
+  if(!items) throw new Error('定型表現のファイルではないようです');
+  const valid = items.filter(it=> it && String(it.expr || '').trim());
+  if(valid.length === 0) throw new Error('表現が1件も入っていません');
+  const decks = await loadDecks();
+  let deck = decks.find(d=> d.exprDeck) || decks.find(d=> d.name === EXPR_DECK_NAME);
+  if(!deck){
+    deck = { name: EXPR_DECK_NAME, folder: '', exprDeck: true, mask: { top: 0, bottom: 0, left: 0, right: 0 }, shots: [] };
+  }
+  deck.exprDeck = true;
+  deck.name = EXPR_DECK_NAME;
+  deck.folder = '';
+  const byKey = {};
+  (deck.shots || []).forEach(s=>{ if(s.exprKey) byKey[s.exprKey] = s; });
+  let added = 0, updated = 0;
+  valid.forEach(item=>{
+    const key = String(item.expr).trim();
+    const ex = byKey[key];
+    if(ex){
+      ex.word = item.expr;
+      ex.answerText = exprAnswerText(item);
+      ex.exprMeaning = item.meaning || '';
+      ex.exprForm = item.form || '';
+      ex.exprRelated = item.related || '';
+      ex.exprExample = item.example || '';
+      ex.exprExampleJa = item.exampleJa || '';
+      ex.exprSource = item.source || '';
+      ex.exprBatch = item.batch || 0;
+      updated++;
+    }else{
       const front = makeExprFrontImage(item.expr);
-      return {
+      const shot = {
         dataUrl: front.dataUrl, width: front.width, height: front.height,
         mask: { top: 0, bottom: 0, left: 0, right: 0 },
-        id: prev ? prev.id : exprShotId(item.expr),
-        memLevel: prev && typeof prev.memLevel === 'number' ? prev.memLevel : 0,
+        id: exprShotId(key),
+        memLevel: 0,
         hint: '',
         answerText: exprAnswerText(item),
         word: item.expr, surface: '',
-        exprCard: true, exprKey: item.expr,
+        exprCard: true, exprKey: key,
         exprMeaning: item.meaning || '', exprForm: item.form || '',
         exprRelated: item.related || '', exprExample: item.example || '',
         exprExampleJa: item.exampleJa || '', exprSource: item.source || '',
         exprBatch: item.batch || 0,
-        printed: prev ? !!prev.printed : false
+        printed: false
       };
-    });
-    if(!deck){
-      deck = { name: EXPR_DECK_NAME, folder: '', exprDeck: true, mask: { top: 0, bottom: 0, left: 0, right: 0 }, shots: [] };
+      deck.shots.push(shot);
+      byKey[key] = shot;
+      added++;
     }
-    deck.exprDeck = true;
-    deck.name = EXPR_DECK_NAME;
-    deck.folder = ''; // 置き場は常にフォルダなし(蓄積ルームと同じ並び)
-    deck.exprVersion = EXPRESSIONS_DATA.version;
-    deck.shots = shots;
-    await saveDeckToStorage(deck);
-  }catch(e){ console.error(e); }
+  });
+  await saveDeckToStorage(deck);
+  await refreshBrowseView();
+  return { added: added, updated: updated, total: deck.shots.length };
+}
+const exprImportBtn = document.getElementById('exprImportBtn');
+const exprImportInput = document.getElementById('exprImportInput');
+if(exprImportBtn && exprImportInput){
+  exprImportBtn.addEventListener('click', ()=> exprImportInput.click());
+  exprImportInput.addEventListener('change', async ()=>{
+    const f = exprImportInput.files && exprImportInput.files[0];
+    exprImportInput.value = '';
+    if(!f) return;
+    try{
+      const data = JSON.parse(await f.text());
+      const r = await importExpressionsData(data);
+      showToast('定型表現を読み込みました（新規' + r.added + '件・更新' + r.updated + '件、セットは全部で' + r.total + '件）');
+      setStatus('定型表現セットを更新しました');
+    }catch(e){
+      console.error(e);
+      showToast('定型表現ファイルを読み込めませんでした：' + (e.message || ''), true);
+    }
+  });
 }
 
 /* 定型表現カード専用のPDF画像。AIカードと寸法をそろえ(幅1400・仕切り540)、
@@ -3424,7 +3355,6 @@ function makePdfExprImage(shot){
 
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
-  await syncExprDeck(); // 定型表現セットを最新データに同期
   await refreshFolderSelect();
   await renderFolderList();
   kickBgTextConvert(); // 文字版の無いセットがあれば裏で作る
