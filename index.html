@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-20 19:00（定型表現は蓄積ルームへ入り、答えは品詞と意味だけにした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-25 21:20（蓄積ルーム専用タブと書き出し履歴を追加した版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1339,6 +1339,43 @@
 </div>
 
 </div><!-- /tab-page: study -->
+
+<div class="tab-page" data-tab="accum">
+
+<!-- ===== 蓄積ルーム専用タブ =====
+     蓄積ルームは毎日使うので、保存済み一覧から探さなくて済むよう
+     専用タブにした。中身の確認・練習・書き出し・印刷済みの管理と、
+     書き出し履歴(間違えた書き出しの取り消し)をここに集める -->
+<div class="panel">
+  <div class="section-label">蓄積ルーム</div>
+  <div class="sub" id="accumSummary" style="margin-bottom:8px;">読み込んでいます…</div>
+  <div class="row">
+    <button id="accumPracticeBtn" class="btn-main" style="flex:1">一問一答で練習する</button>
+  </div>
+  <div class="row">
+    <button id="accumPdfBtn" class="btn-secondary" style="flex:1">PDFで書き出す</button>
+    <button id="accumTxtEditBtn" class="btn-secondary" style="flex:1">文字版を見る・直す</button>
+  </div>
+  <div class="row">
+    <button id="accumPrintResetBtn" class="btn-secondary" style="flex:1">印刷済みを全部リセット</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="section-label">蓄積ルームの中身</div>
+  <div id="accumCardList"></div>
+</div>
+
+<div class="panel">
+  <div class="section-label">書き出し履歴</div>
+  <div class="sub" style="margin-bottom:8px;">PDFを書き出すたびに記録が残ります。間違えて書き出して印刷済みになってしまったときは、その回の「印刷済みを取り消す」を押すと、その回に印刷済みになったカードだけを未印刷に戻せます。</div>
+  <div id="exportHistoryList"></div>
+  <div class="row">
+    <button id="exportHistoryClearBtn" class="btn-secondary" style="flex:1">履歴を全部消す</button>
+  </div>
+</div>
+
+</div><!-- /tab-page: accum -->
 
 <div class="tab-page" data-tab="saved">
 
@@ -1438,6 +1475,7 @@
   <button class="tab-btn active" data-tab="capture"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7l1.5-3h3L15 7"/><circle cx="12" cy="13" r="3.5"/></svg></span>撮影</button>
   <button class="tab-btn" data-tab="ai"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.4L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.6z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span>AI</button>
   <button class="tab-btn" data-tab="study"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 1 3.4 10.9c-.6.5-.9 1-1 2.1H9.6c-.1-1.1-.4-1.6-1-2.1A6 6 0 0 1 12 3z"/><path d="M9.5 19h5M10.5 21.5h3"/></svg></span>暗記</button>
+  <button class="tab-btn" data-tab="accum"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></span>蓄積</button>
   <button class="tab-btn" data-tab="saved"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>保存済み</button>
   <button class="tab-btn" data-tab="data"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="7" ry="3"/><path d="M5 5.5v13c0 1.7 3.1 3 7 3s7-1.3 7-3v-13"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg></span>データ</button>
 </div>
@@ -1676,6 +1714,7 @@ tabBarEl.addEventListener('click', (e)=>{
   const target = btn.dataset.tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
   tabPages.forEach(p => p.classList.toggle('active', p.dataset.tab === target));
+  if(target === 'accum'){ try{ renderAccumTab(); }catch(e){} }
   window.scrollTo({ top:0, behavior:'instant' in window ? 'instant' : 'auto' });
 });
 
@@ -2497,6 +2536,7 @@ async function refreshBrowseView(){
   }else{
     await renderDeckList();
   }
+  try{ renderAccumTab(); }catch(e){}
 }
 
 /* フォルダ(または「すべてのセット」などの特殊ビュー)を開いて
@@ -3310,6 +3350,166 @@ if(exprImportBtn && exprImportInput){
   });
 }
 
+
+/* ================= 蓄積ルーム専用タブと書き出し履歴 =================
+   書き出し履歴は localStorage に残す(新しい順・最大50件)。
+   各記録には「その回に印刷済みになったカードのID」を持たせておき、
+   間違えて書き出したときに、その回分だけ印刷済みを取り消せるようにする */
+const EXPORT_HISTORY_KEY = 'exportHistoryV1';
+function loadExportHistory(){
+  try{
+    const v = JSON.parse(localStorage.getItem(EXPORT_HISTORY_KEY) || '[]');
+    return Array.isArray(v) ? v : [];
+  }catch(e){ return []; }
+}
+function saveExportHistory(hist){
+  try{ localStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(hist.slice(0, 50))); }catch(e){}
+}
+function pushExportHistory(entry){
+  const hist = loadExportHistory();
+  hist.unshift({ id: 'exp' + Date.now(), at: new Date().toISOString(), undone: false,
+    filename: entry.filename || '', mode: entry.mode || '', total: entry.total || 0,
+    blanked: entry.blanked || 0, printed: entry.printed || [] });
+  saveExportHistory(hist);
+}
+async function undoExportPrinted(entryId){
+  const hist = loadExportHistory();
+  const entry = hist.find(h=> h.id === entryId);
+  if(!entry || entry.undone) return;
+  if(!confirm('この書き出しで印刷済みになったカードを、未印刷に戻します。よろしいですか？')) return;
+  const decks = await loadDecks();
+  let restored = 0;
+  for(const p of (entry.printed || [])){
+    const deck = decks.find(d=> d.name === p.deck);
+    if(!deck) continue;
+    let changed = false;
+    (deck.shots || []).forEach(s=>{
+      if(p.ids.includes(s.id) && s.printed){ s.printed = false; changed = true; restored++; }
+    });
+    if(changed) await saveDeckToStorage(deck);
+  }
+  entry.undone = true;
+  saveExportHistory(hist);
+  await refreshBrowseView();
+  showToast('印刷済みを取り消しました（' + restored + '枚を未印刷に戻しました）');
+}
+function escHistHtml(t){
+  return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderExportHistory(){
+  const el = document.getElementById('exportHistoryList');
+  if(!el) return;
+  const hist = loadExportHistory();
+  el.innerHTML = '';
+  if(hist.length === 0){
+    el.innerHTML = '<div class="browse-empty">まだ履歴がありません</div>';
+    return;
+  }
+  const modeLabel = { asis: 'そのまま', bw: '白黒', text: '文字化' };
+  hist.forEach(h=>{
+    const row = document.createElement('div');
+    row.className = 'browse-item';
+    const d = new Date(h.at);
+    const when = isNaN(d.getTime()) ? '' : d.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const printedCount = (h.printed || []).reduce((n, pp)=> n + pp.ids.length, 0);
+    const main = document.createElement('div');
+    main.className = 'browse-main';
+    main.innerHTML = '<div class="browse-title">' + escHistHtml(h.filename || 'PDF') + '</div>' +
+      '<div class="browse-sub">' + when + '／' + (modeLabel[h.mode] || h.mode) + '／全' + h.total + '枚中 ' + printedCount + '枚を印刷済みに' +
+      (h.blanked ? '（空白 ' + h.blanked + '枚）' : '') + (h.undone ? '／取り消し済み' : '') + '</div>';
+    row.appendChild(main);
+    if(printedCount > 0 && !h.undone){
+      const actions = document.createElement('div');
+      actions.className = 'browse-actions';
+      const btn = document.createElement('button');
+      btn.className = 'btn-secondary';
+      btn.textContent = '印刷済みを取り消す';
+      btn.addEventListener('click', ()=> undoExportPrinted(h.id));
+      actions.appendChild(btn);
+      row.appendChild(actions);
+    }
+    el.appendChild(row);
+  });
+}
+async function renderAccumTab(){
+  const sumEl = document.getElementById('accumSummary');
+  if(!sumEl) return;
+  const decks = await loadDecks();
+  const accum = decks.find(d=> d.accum) || decks.find(d=> d.name === ACCUM_DECK_NAME);
+  const listEl = document.getElementById('accumCardList');
+  const btnIds = ['accumPracticeBtn', 'accumPdfBtn', 'accumTxtEditBtn', 'accumPrintResetBtn'];
+  if(!accum){
+    sumEl.textContent = 'まだ蓄積ルームがありません。暗記タブの「蓄積ルームに追加」や、データタブの定型表現ファイルの読み込みで作られます。';
+    btnIds.forEach(id=>{ const b = document.getElementById(id); if(b) b.disabled = true; });
+    if(listEl) listEl.innerHTML = '';
+  }else{
+    const printed = accum.shots.filter(s=> s.printed).length;
+    sumEl.textContent = '全部で' + accum.shots.length + '枚（印刷済み ' + printed + '枚・未印刷 ' + (accum.shots.length - printed) + '枚）。書き出すと未印刷の分だけが印刷され、印刷済みの位置は空白になります。';
+    btnIds.forEach(id=>{ const b = document.getElementById(id); if(b) b.disabled = accum.shots.length === 0; });
+    if(listEl){
+      listEl.innerHTML = '';
+      if(accum.shots.length === 0){
+        listEl.innerHTML = '<div class="browse-empty">まだカードがありません</div>';
+      }
+      accum.shots.forEach((s, i)=>{
+        const row = document.createElement('div');
+        row.className = 'browse-item';
+        let title, sub;
+        if(s.exprCard || s.answerText){
+          title = s.word || s.exprKey || '（カード）';
+          sub = s.exprCard ? ('定型表現' + (s.exprPos ? '・' + s.exprPos : '')) : 'AIカード';
+        }else{
+          title = (s.textEn || '').trim() || '写真カード';
+          sub = (s.textJa || '').trim() || '文字版はまだありません';
+        }
+        const main = document.createElement('div');
+        main.className = 'browse-main';
+        main.innerHTML = '<div class="browse-title">' + (i + 1) + '. ' + escHistHtml(title) + (s.printed ? ' <span class="accum-badge">印刷済み</span>' : '') + '</div>' +
+          '<div class="browse-sub">' + escHistHtml(sub) + (typeof s.memLevel === 'number' && s.memLevel > 0 ? '／暗記度 ' + s.memLevel : '') + '</div>';
+        row.appendChild(main);
+        listEl.appendChild(row);
+      });
+    }
+  }
+  renderExportHistory();
+}
+async function getAccumDeckForTab(){
+  const decks = await loadDecks();
+  return decks.find(d=> d.accum) || decks.find(d=> d.name === ACCUM_DECK_NAME) || null;
+}
+const accumPracticeBtn = document.getElementById('accumPracticeBtn');
+if(accumPracticeBtn) accumPracticeBtn.addEventListener('click', async ()=>{
+  const d = await getAccumDeckForTab();
+  if(d) startDeckPractice(d);
+});
+const accumPdfBtn = document.getElementById('accumPdfBtn');
+if(accumPdfBtn) accumPdfBtn.addEventListener('click', async ()=>{
+  const d = await getAccumDeckForTab();
+  if(d) startPdfExport([{ title: null, shots: d.shots }], d.name + '.pdf', [d]);
+});
+const accumTxtEditBtn = document.getElementById('accumTxtEditBtn');
+if(accumTxtEditBtn) accumTxtEditBtn.addEventListener('click', async ()=>{
+  const d = await getAccumDeckForTab();
+  if(d) openTxtEdit(d);
+});
+const accumPrintResetBtn = document.getElementById('accumPrintResetBtn');
+if(accumPrintResetBtn) accumPrintResetBtn.addEventListener('click', async ()=>{
+  const d = await getAccumDeckForTab();
+  if(!d) return;
+  if(!confirm('蓄積ルームの印刷済みを全部リセットします（全部のカードが未印刷に戻ります）。よろしいですか？')) return;
+  d.shots.forEach(s=>{ s.printed = false; });
+  await saveDeckToStorage(d);
+  await refreshBrowseView();
+  showToast('印刷済みをリセットしました');
+});
+const exportHistoryClearBtn = document.getElementById('exportHistoryClearBtn');
+if(exportHistoryClearBtn) exportHistoryClearBtn.addEventListener('click', ()=>{
+  if(!confirm('書き出し履歴を全部消します（カードの印刷済みの状態は変わりません）。よろしいですか？')) return;
+  saveExportHistory([]);
+  renderExportHistory();
+  showToast('書き出し履歴を消しました');
+});
+
 /* 定型表現カード専用のPDF画像。AIカードと寸法をそろえ(幅1400・仕切り540)、
    右側は品詞と意味だけ入れる */
 function makePdfExprImage(shot){
@@ -3382,6 +3582,7 @@ function makePdfExprImage(shot){
 (async ()=>{
   await migrateOldDecksIfNeeded(); // 以前のセットがあれば引っ越し
   await migrateExprDeckToAccum(); // 旧「定型表現」セットがあれば蓄積ルームへ移す
+  try{ renderAccumTab(); }catch(e){}
   await refreshFolderSelect();
   await renderFolderList();
   kickBgTextConvert(); // 文字版の無いセットがあれば裏で作る
@@ -5836,6 +6037,16 @@ async function startPdfExport(sections, filename, accumDecks){
       await markAccumPrinted(d, drawn);
     }
   };
+  // 書き出し履歴に残す(間違えた書き出しの「印刷済み」を後から取り消せるように)
+  const recordHistory = (m)=>{
+    try{
+      const printed = [];
+      accumDrawn.forEach((drawn, d)=>{
+        if(drawn.length) printed.push({ deck: d.name, ids: drawn.map(s=> s.id) });
+      });
+      pushExportHistory({ filename: filename, mode: m, total: totalShots, blanked: blankSet.size, printed: printed });
+    }catch(e){ console.error(e); }
+  };
 
   const mode = await pickFromList('PDFの作り方を選んでください', [
     { label:'そのまま（写真）', value:'asis' },
@@ -5846,7 +6057,7 @@ async function startPdfExport(sections, filename, accumDecks){
 
   if(mode === 'asis'){
     const ok = buildPdfSections(sections, filename, { mode:'asis', blankSet: blankSet });
-    if(ok){ showToast('PDFを作成しました'); await markAccum(); }
+    if(ok){ showToast('PDFを作成しました'); await markAccum(); recordHistory('asis'); }
     return;
   }
 
@@ -5869,7 +6080,7 @@ async function startPdfExport(sections, filename, accumDecks){
     pdfBwActive = true;
     const ok = buildPdfSections(sections, filename, { mode:'bw', blankSet: blankSet });
     pdfBwActive = false;
-    if(ok){ showToast('白黒のPDFを作成しました'); await markAccum(); }
+    if(ok){ showToast('白黒のPDFを作成しました'); await markAccum(); recordHistory('bw'); }
     return;
   }
 
@@ -5930,6 +6141,7 @@ async function startPdfExport(sections, filename, accumDecks){
       ? 'PDFを作成しました（' + failed + '枚は読み取れず写真のままです）'
       : '文字化したPDFを作成しました');
     await markAccum();
+    recordHistory('text');
   }
 }
 
