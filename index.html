@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-25 21:20（蓄積ルーム専用タブと書き出し履歴を追加した版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-25 21:30（蓄積ルームのカードを1枚ずつ印刷済み／未印刷に切り替えられるようにした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1363,6 +1363,7 @@
 
 <div class="panel">
   <div class="section-label">蓄積ルームの中身</div>
+  <div class="sub" style="margin-bottom:8px;">カードを押すと、印刷済み／未印刷を1枚ずつ切り替えられます。間違えた書き出しで印刷済みになってしまった分は、ここで未印刷に戻せます。</div>
   <div id="accumCardList"></div>
 </div>
 
@@ -3467,6 +3468,20 @@ async function renderAccumTab(){
         main.innerHTML = '<div class="browse-title">' + (i + 1) + '. ' + escHistHtml(title) + (s.printed ? ' <span class="accum-badge">印刷済み</span>' : '') + '</div>' +
           '<div class="browse-sub">' + escHistHtml(sub) + (typeof s.memLevel === 'number' && s.memLevel > 0 ? '／暗記度 ' + s.memLevel : '') + '</div>';
         row.appendChild(main);
+        // 行を押すと、そのカードだけ印刷済み／未印刷を切り替える
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', async ()=>{
+          const fresh = await getAccumDeckForTab();
+          if(!fresh) return;
+          const target = (fresh.shots || []).find(x=> x.id === s.id);
+          if(!target) return;
+          const next = !target.printed;
+          if(!confirm('「' + title + '」を' + (next ? '印刷済みに' : '未印刷に') + 'しますか？')) return;
+          target.printed = next;
+          await saveDeckToStorage(fresh);
+          await refreshBrowseView();
+          showToast(next ? '印刷済みにしました' : '未印刷に戻しました');
+        });
         listEl.appendChild(row);
       });
     }
