@@ -1261,7 +1261,7 @@
 <div class="tab-page" data-tab="ai">
 <div class="panel">
   <div class="section-label">AI単語カード（写真から意味を調べて作る）</div>
-  <div class="ai-build-stamp">アプリの版：2026-11-25 21:30（蓄積ルームのカードを1枚ずつ印刷済み／未印刷に切り替えられるようにした版）</div>
+  <div class="ai-build-stamp">アプリの版：2026-11-25 21:55（蓄積ルームの一括選択と、白黒PDFの本当のモノクロ化をした版）</div>
   <div class="sub">長文の中の知らない単語を写真に撮り、単語だけを囲んで切り取ると、AIが意味を調べて一問一答カードにします。過去形・複数形などの活用形は、原型で調べます。</div>
   <div class="section-label" style="margin-top:10px;">Gemini APIキー（無料）</div>
   <div class="ai-key-row">
@@ -1363,7 +1363,17 @@
 
 <div class="panel">
   <div class="section-label">蓄積ルームの中身</div>
-  <div class="sub" style="margin-bottom:8px;">カードを押すと、印刷済み／未印刷を1枚ずつ切り替えられます。間違えた書き出しで印刷済みになってしまった分は、ここで未印刷に戻せます。</div>
+  <div class="sub" style="margin-bottom:8px;">カードを押すと、印刷済み／未印刷を1枚ずつ切り替えられます。間違えた書き出しで印刷済みになってしまった分は、ここで未印刷に戻せます。まとめて直すときは「カードを選択する」から一気に選べます。</div>
+  <div class="row">
+    <button id="accumSelectModeBtn" class="btn-secondary" style="flex:1">カードを選択する</button>
+  </div>
+  <div id="accumBulkBar" class="bulk-bar">
+    <button id="accumBulkUnprintBtn" class="btn-secondary">選んだカードを未印刷に戻す</button>
+    <button id="accumBulkPrintBtn" class="btn-secondary">選んだカードを印刷済みにする</button>
+    <button id="accumBulkAllBtn" class="btn-secondary">全て選択</button>
+    <button id="accumBulkNoneBtn" class="btn-secondary">選択を解除</button>
+  </div>
+  <div class="sub" id="accumSelectCount" style="margin:8px 0; display:none;"></div>
   <div id="accumCardList"></div>
 </div>
 
@@ -3432,6 +3442,19 @@ function renderExportHistory(){
     el.appendChild(row);
   });
 }
+let accumSelectMode = false;
+let accumSelectedIds = new Set();
+let accumTabShotIds = [];
+function updateAccumSelectCount(){
+  const el = document.getElementById('accumSelectCount');
+  if(!el) return;
+  if(accumSelectMode){
+    el.style.display = '';
+    el.textContent = accumSelectedIds.size + '枚選択中';
+  }else{
+    el.style.display = 'none';
+  }
+}
 async function renderAccumTab(){
   const sumEl = document.getElementById('accumSummary');
   if(!sumEl) return;
@@ -3439,6 +3462,15 @@ async function renderAccumTab(){
   const accum = decks.find(d=> d.accum) || decks.find(d=> d.name === ACCUM_DECK_NAME);
   const listEl = document.getElementById('accumCardList');
   const btnIds = ['accumPracticeBtn', 'accumPdfBtn', 'accumTxtEditBtn', 'accumPrintResetBtn'];
+  accumTabShotIds = accum ? (accum.shots || []).map(s=> s.id) : [];
+  const selBtn = document.getElementById('accumSelectModeBtn');
+  if(selBtn){
+    selBtn.textContent = accumSelectMode ? '選択をやめる' : 'カードを選択する';
+    selBtn.disabled = !accum || (accum.shots || []).length === 0;
+  }
+  const bulkBar = document.getElementById('accumBulkBar');
+  if(bulkBar) bulkBar.classList.toggle('active', accumSelectMode && !!accum);
+  updateAccumSelectCount();
   if(!accum){
     sumEl.textContent = 'まだ蓄積ルームがありません。暗記タブの「蓄積ルームに追加」や、データタブの定型表現ファイルの読み込みで作られます。';
     btnIds.forEach(id=>{ const b = document.getElementById(id); if(b) b.disabled = true; });
@@ -3454,7 +3486,20 @@ async function renderAccumTab(){
       }
       accum.shots.forEach((s, i)=>{
         const row = document.createElement('div');
-        row.className = 'browse-item';
+        row.className = 'browse-item' + (accumSelectMode ? ' select-mode' : '');
+        let check = null;
+        if(accumSelectMode){
+          check = document.createElement('input');
+          check.type = 'checkbox';
+          check.checked = accumSelectedIds.has(s.id);
+          check.addEventListener('click', (e)=> e.stopPropagation());
+          check.addEventListener('change', ()=>{
+            if(check.checked) accumSelectedIds.add(s.id);
+            else accumSelectedIds.delete(s.id);
+            updateAccumSelectCount();
+          });
+          row.appendChild(check);
+        }
         let title, sub;
         if(s.exprCard || s.answerText){
           title = s.word || s.exprKey || '（カード）';
@@ -3468,9 +3513,17 @@ async function renderAccumTab(){
         main.innerHTML = '<div class="browse-title">' + (i + 1) + '. ' + escHistHtml(title) + (s.printed ? ' <span class="accum-badge">印刷済み</span>' : '') + '</div>' +
           '<div class="browse-sub">' + escHistHtml(sub) + (typeof s.memLevel === 'number' && s.memLevel > 0 ? '／暗記度 ' + s.memLevel : '') + '</div>';
         row.appendChild(main);
-        // 行を押すと、そのカードだけ印刷済み／未印刷を切り替える
+        // 行を押すと、選択モードでは選択の切り替え、
+        // 通常モードではそのカードだけ印刷済み／未印刷を切り替える
         row.style.cursor = 'pointer';
         row.addEventListener('click', async ()=>{
+          if(accumSelectMode){
+            if(accumSelectedIds.has(s.id)) accumSelectedIds.delete(s.id);
+            else accumSelectedIds.add(s.id);
+            if(check) check.checked = accumSelectedIds.has(s.id);
+            updateAccumSelectCount();
+            return;
+          }
           const fresh = await getAccumDeckForTab();
           if(!fresh) return;
           const target = (fresh.shots || []).find(x=> x.id === s.id);
@@ -3523,6 +3576,40 @@ if(exportHistoryClearBtn) exportHistoryClearBtn.addEventListener('click', ()=>{
   saveExportHistory([]);
   renderExportHistory();
   showToast('書き出し履歴を消しました');
+});
+const accumSelectModeBtn = document.getElementById('accumSelectModeBtn');
+if(accumSelectModeBtn) accumSelectModeBtn.addEventListener('click', ()=>{
+  accumSelectMode = !accumSelectMode;
+  if(!accumSelectMode) accumSelectedIds = new Set();
+  renderAccumTab();
+});
+async function accumBulkSetPrinted(flag){
+  if(accumSelectedIds.size === 0){ showToast('カードが選ばれていません', true); return; }
+  const d = await getAccumDeckForTab();
+  if(!d) return;
+  let n = 0;
+  (d.shots || []).forEach(s=>{
+    if(accumSelectedIds.has(s.id) && s.printed !== flag){ s.printed = flag; n++; }
+  });
+  await saveDeckToStorage(d);
+  accumSelectedIds = new Set();
+  accumSelectMode = false;
+  await refreshBrowseView();
+  showToast(n + '枚を' + (flag ? '印刷済みにしました' : '未印刷に戻しました'));
+}
+const accumBulkUnprintBtn = document.getElementById('accumBulkUnprintBtn');
+if(accumBulkUnprintBtn) accumBulkUnprintBtn.addEventListener('click', ()=> accumBulkSetPrinted(false));
+const accumBulkPrintBtn = document.getElementById('accumBulkPrintBtn');
+if(accumBulkPrintBtn) accumBulkPrintBtn.addEventListener('click', ()=> accumBulkSetPrinted(true));
+const accumBulkAllBtn = document.getElementById('accumBulkAllBtn');
+if(accumBulkAllBtn) accumBulkAllBtn.addEventListener('click', ()=>{
+  accumSelectedIds = new Set(accumTabShotIds);
+  renderAccumTab();
+});
+const accumBulkNoneBtn = document.getElementById('accumBulkNoneBtn');
+if(accumBulkNoneBtn) accumBulkNoneBtn.addEventListener('click', ()=>{
+  accumSelectedIds = new Set();
+  renderAccumTab();
 });
 
 /* 定型表現カード専用のPDF画像。AIカードと寸法をそろえ(幅1400・仕切り540)、
@@ -4962,6 +5049,136 @@ function inkProcessImage(dataUrl){
     img.src = dataUrl;
   });
 }
+
+/* ---------- グレースケールPNG化 ----------
+   白黒モードでも、canvasから作るJPEGは「カラー画像」としてPDFに入るため、
+   プリンタが色インクを混ぜて印刷してしまい、色が付いて見えることがある。
+   そこで白黒モードでは、画像をグレースケール専用のPNG(色の情報を持たない
+   形式)に変換してから埋め込む。PDFの中でも白黒専用データになるので、
+   プリンタは黒インクだけで印刷する */
+function crc32Bytes(bytes){
+  let table = crc32Bytes.table;
+  if(!table){
+    table = crc32Bytes.table = [];
+    for(let n = 0; n < 256; n++){
+      let c = n;
+      for(let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for(let i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+function pngChunk(type, data){
+  const out = new Uint8Array(12 + data.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length);
+  for(let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  out.set(data, 8);
+  const crcData = new Uint8Array(4 + data.length);
+  crcData.set(out.subarray(4, 8), 0);
+  crcData.set(data, 4);
+  dv.setUint32(8 + data.length, crc32Bytes(crcData));
+  return out;
+}
+async function zlibCompressBytes(raw){
+  if(window.CompressionStream){
+    try{
+      const cs = new CompressionStream('deflate');
+      const buf = await new Response(new Blob([raw]).stream().pipeThrough(cs)).arrayBuffer();
+      return new Uint8Array(buf);
+    }catch(e){ /* 対応していない環境では格納形式に切り替える */ }
+  }
+  // 圧縮なし(格納形式)のzlibストリーム
+  let a = 1, b = 0;
+  for(let i = 0; i < raw.length; i++){ a = (a + raw[i]) % 65521; b = (b + a) % 65521; }
+  const adler = (((b << 16) | a) >>> 0);
+  const total = 2 + raw.length + Math.ceil(Math.max(1, raw.length) / 65535) * 5 + 4;
+  const out = new Uint8Array(total);
+  let o = 0;
+  out[o++] = 0x78; out[o++] = 0x01;
+  let pos = 0;
+  if(raw.length === 0){
+    out[o++] = 1; out[o++] = 0; out[o++] = 0; out[o++] = 0xFF; out[o++] = 0xFF;
+  }
+  while(pos < raw.length){
+    const chunk = Math.min(65535, raw.length - pos);
+    out[o++] = (pos + chunk >= raw.length) ? 1 : 0;
+    out[o++] = chunk & 0xFF; out[o++] = (chunk >> 8) & 0xFF;
+    const nlen = (~chunk) & 0xFFFF;
+    out[o++] = nlen & 0xFF; out[o++] = (nlen >> 8) & 0xFF;
+    out.set(raw.subarray(pos, pos + chunk), o); o += chunk;
+    pos += chunk;
+  }
+  out[o++] = (adler >>> 24) & 0xFF; out[o++] = (adler >>> 16) & 0xFF;
+  out[o++] = (adler >>> 8) & 0xFF; out[o++] = adler & 0xFF;
+  return out.subarray(0, o);
+}
+async function encodeGrayPng(gray, w, h){
+  try{
+    const raw = new Uint8Array((w + 1) * h);
+    for(let y = 0; y < h; y++){
+      raw[y * (w + 1)] = 0; // 行頭のフィルタ指定(なし)
+      raw.set(gray.subarray(y * w, (y + 1) * w), y * (w + 1) + 1);
+    }
+    const idat = await zlibCompressBytes(raw);
+    const ihdr = new Uint8Array(13);
+    const dv = new DataView(ihdr.buffer);
+    dv.setUint32(0, w);
+    dv.setUint32(4, h);
+    ihdr[8] = 8;  // 階調は8ビット
+    ihdr[9] = 0;  // 色の形式0 = グレースケール
+    const parts = [
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      pngChunk('IHDR', ihdr),
+      pngChunk('IDAT', idat),
+      pngChunk('IEND', new Uint8Array(0))
+    ];
+    const all = new Uint8Array(parts.reduce((n, pp)=> n + pp.length, 0));
+    let o = 0;
+    parts.forEach(pp=>{ all.set(pp, o); o += pp.length; });
+    let bin = '';
+    const CH = 0x8000;
+    for(let i = 0; i < all.length; i += CH){
+      bin += String.fromCharCode.apply(null, all.subarray(i, i + CH));
+    }
+    return 'data:image/png;base64,' + btoa(bin);
+  }catch(e){
+    console.error(e);
+    return null;
+  }
+}
+/* 画像(JPEGデータURL)を、ピクセルを白黒化したグレースケールPNGにする。
+   失敗したときは元の画像のまま返す(書き出し自体は止めない) */
+async function toGrayPngDataUrl(dataUrl){
+  try{
+    const img = await new Promise((resolve, reject)=>{
+      const im = new Image();
+      im.onload = ()=> resolve(im);
+      im.onerror = reject;
+      im.src = dataUrl;
+    });
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if(!w || !h) return dataUrl;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    cx.drawImage(img, 0, 0);
+    const id = cx.getImageData(0, 0, w, h);
+    const px = id.data;
+    const gray = new Uint8Array(w * h);
+    for(let i = 0, j = 0; i < px.length; i += 4, j++){
+      gray[j] = Math.round(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
+    }
+    const png = await encodeGrayPng(gray, w, h);
+    return png || dataUrl;
+  }catch(e){
+    console.error(e);
+    return dataUrl;
+  }
+}
+
 let inkPreparing = false;
 async function prepareInkImages(){
   if(!inkSaveOn || inkPreparing) return;
@@ -5248,7 +5465,9 @@ function buildPdfSections(sections, filename, opts){
         // 「新しい分だけ」印刷のとき、印刷済みカードは場所だけ確保して空白にする
         if(opts && opts.blankSet && opts.blankSet.has(s)){
           let aspect;
-          if(opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
+          if(opts.bwCache && opts.bwCache.has(s)){
+            aspect = opts.bwCache.get(s).aspect;
+          }else if(opts.mode === 'text' && opts.textMap && opts.textMap.has(s)){
             const t = opts.textMap.get(s);
             aspect = makePdfWordRowImage({ textEn: t.en, textJa: t.ja }).aspect;
           }else{
@@ -5261,18 +5480,23 @@ function buildPdfSections(sections, filename, opts){
           const t = opts.textMap.get(s);
           return { kind:'text', img: makePdfWordRowImage({ textEn: t.en, textJa: t.ja }) };
         }
-        // 定型表現カードは専用レイアウト(意味・形・関連・例文を全部入れる)
+        // 定型表現カードは専用レイアウト(品詞と意味だけ)
         if(s.exprCard){
+          if(opts && opts.bwCache && opts.bwCache.has(s)) return { kind:'text', img: opts.bwCache.get(s) };
           return { kind:'text', img: makePdfExprImage(s) };
         }
         // AIカードは、調べたときの写真は印刷せず、文字カードだけで出す
         if(s.answerText){
+          if(opts && opts.bwCache && opts.bwCache.has(s)) return { kind:'text', img: opts.bwCache.get(s) };
           return { kind:'text', img: makePdfTextImage(s) };
         }
         return { kind:'photo', shot:s, textImg: null };
       });
+      const headerImg = section.title
+        ? ((opts && opts.bwCache && opts.bwCache.get('header:' + section.title + '（全' + section.shots.length + '枚）')) || makePdfSectionHeaderImage(section.title, '（全' + section.shots.length + '枚）'))
+        : null;
       const items = section.title
-        ? [{ kind:'header', img: makePdfSectionHeaderImage(section.title, '（全' + section.shots.length + '枚）') }].concat(cardItems)
+        ? [{ kind:'header', img: headerImg }].concat(cardItems)
         : cardItems;
 
       items.forEach(it=>{
@@ -5292,11 +5516,12 @@ function buildPdfSections(sections, filename, opts){
         if(it.kind === 'blank'){
           // 場所だけ確保して何も描かない(同じ紙に続きを印刷するため)
         }else if(it.kind === 'text' || it.kind === 'header'){
-          curDoc.addImage(it.img.dataUrl, 'JPEG', x, y, colW, colW * it.img.aspect);
+          curDoc.addImage(it.img.dataUrl, it.img.format || 'JPEG', x, y, colW, colW * it.img.aspect);
         }else{
           const ph = colW * (it.shot.height / it.shot.width);
-          const photoData = (opts && opts.mode === 'bw' && inkCache.has(it.shot.dataUrl)) ? inkCache.get(it.shot.dataUrl) : it.shot.dataUrl;
-          curDoc.addImage(photoData, 'JPEG', x, y, colW, ph);
+          const bwImg = (opts && opts.bwCache && opts.bwCache.has(it.shot)) ? opts.bwCache.get(it.shot) : null;
+          const photoData = bwImg ? bwImg.dataUrl : ((opts && opts.mode === 'bw' && inkCache.has(it.shot.dataUrl)) ? inkCache.get(it.shot.dataUrl) : it.shot.dataUrl);
+          curDoc.addImage(photoData, bwImg ? 'PNG' : 'JPEG', x, y, colW, ph);
           if(it.textImg) curDoc.addImage(it.textImg.dataUrl, 'JPEG', x, y + ph, colW, colW * it.textImg.aspect);
         }
         colYs[curCol] += h + gap + (it.kind === 'header' ? 1.5 : 0);
@@ -6093,7 +6318,30 @@ async function startPdfExport(sections, filename, accumDecks){
       hidePdfProg();
     }
     pdfBwActive = true;
-    const ok = buildPdfSections(sections, filename, { mode:'bw', blankSet: blankSet });
+    // プリンタが色インクを混ぜないよう、全ての画像をグレースケールPNG
+    // (白黒専用のデータ)にしてからPDFに埋め込む
+    const bwCache = new Map();
+    try{
+      for(const sec of sections){
+        if(sec.title){
+          const hImg = makePdfSectionHeaderImage(sec.title, '（全' + sec.shots.length + '枚）');
+          bwCache.set('header:' + sec.title + '（全' + sec.shots.length + '枚）', { dataUrl: await toGrayPngDataUrl(hImg.dataUrl), aspect: hImg.aspect, format: 'PNG' });
+        }
+        for(const sh of (sec.shots || [])){
+          if(sh.exprCard){
+            const cImg = makePdfExprImage(sh);
+            bwCache.set(sh, { dataUrl: await toGrayPngDataUrl(cImg.dataUrl), aspect: cImg.aspect, format: 'PNG' });
+          }else if(sh.answerText){
+            const cImg = makePdfTextImage(sh);
+            bwCache.set(sh, { dataUrl: await toGrayPngDataUrl(cImg.dataUrl), aspect: cImg.aspect, format: 'PNG' });
+          }else{
+            const inked = inkCache.get(sh.dataUrl) || sh.dataUrl;
+            bwCache.set(sh, { dataUrl: await toGrayPngDataUrl(inked), aspect: sh.height / sh.width, format: 'PNG' });
+          }
+        }
+      }
+    }catch(e){ console.error(e); }
+    const ok = buildPdfSections(sections, filename, { mode:'bw', blankSet: blankSet, bwCache: bwCache });
     pdfBwActive = false;
     if(ok){ showToast('白黒のPDFを作成しました'); await markAccum(); recordHistory('bw'); }
     return;
